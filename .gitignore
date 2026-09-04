@@ -1,0 +1,38 @@
+﻿# Dependencies
+node_modules/
+frontend/dist/
+
+# Python
+ml-service/.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Java / Maven
+backend/target/
+backend/.classpath
+backend/.project
+backend/.settings/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+backend/.env
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
