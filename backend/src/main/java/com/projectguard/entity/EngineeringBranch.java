@@ -1,14 +1,6 @@
 package com.projectguard.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,55 +8,53 @@ import java.util.List;
 @Entity
 @Table(
         name = "engineering_branches",
-        uniqueConstraints = @UniqueConstraint(name = "uk_engineering_branches_name", columnNames = "name")
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_engineering_branches_name",
+                columnNames = "name"
+        )
 )
 public class EngineeringBranch {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id")
     private Long id;
 
-    @Column(name = "name", nullable = false, length = 100)
+    @Column(nullable = false, length = 100)
     private String name;
 
-    @Column(name = "description", length = 500)
+    @Column(length = 500)
     private String description;
+
+    /**
+     * Which domains are relevant for this branch.
+     * Owner side of the branch_domains join table.
+     */
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "branch_domains",
+            joinColumns = @JoinColumn(name = "branch_id"),
+            inverseJoinColumns = @JoinColumn(name = "domain_id")
+    )
+    private List<ProjectDomain> domains = new ArrayList<>();
 
     @OneToMany(mappedBy = "branch", fetch = FetchType.LAZY)
     private List<StudentProfile> studentProfiles = new ArrayList<>();
 
-    public EngineeringBranch() {
-    }
+    public EngineeringBranch() {}
 
-    public Long getId() {
-        return id;
-    }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
-    public String getName() {
-        return name;
-    }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
 
-    public void setName(String name) {
-        this.name = name;
-    }
+    public List<ProjectDomain> getDomains() { return domains; }
+    public void setDomains(List<ProjectDomain> domains) { this.domains = domains; }
 
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public List<StudentProfile> getStudentProfiles() {
-        return studentProfiles;
-    }
-
+    public List<StudentProfile> getStudentProfiles() { return studentProfiles; }
     public void setStudentProfiles(List<StudentProfile> studentProfiles) {
         this.studentProfiles = studentProfiles;
     }
@@ -77,9 +67,7 @@ public class EngineeringBranch {
     }
 
     @Override
-    public int hashCode() {
-        return getClass().hashCode();
-    }
+    public int hashCode() { return getClass().hashCode(); }
 
     @Override
     public String toString() {

@@ -55,6 +55,13 @@ public class StudentProfile {
     @Column(name = "interests", columnDefinition = "TEXT")
     private String interests;
 
+    /**
+     * Relative path to the profile photo stored on disk.
+     * e.g. "profile-photos/abc123.jpg". Null if no photo uploaded.
+     */
+    @Column(name = "photo_path", length = 500)
+    private String photoPath;
+
     @OneToMany(mappedBy = "studentProfile", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<StudentSkill> studentSkills = new ArrayList<>();
 
@@ -134,6 +141,14 @@ public class StudentProfile {
 
     public void setInterests(String interests) {
         this.interests = interests;
+    }
+
+    public String getPhotoPath() {
+        return photoPath;
+    }
+
+    public void setPhotoPath(String photoPath) {
+        this.photoPath = photoPath;
     }
 
     public List<StudentSkill> getStudentSkills() {

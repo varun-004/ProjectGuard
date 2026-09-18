@@ -1,14 +1,6 @@
 package com.projectguard.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,32 +20,27 @@ public class Skill {
     @Column(name = "name", nullable = false, length = 100)
     private String name;
 
+    /**
+     * Inverse side of the domain_skills ManyToMany.
+     */
+    @ManyToMany(mappedBy = "skills", fetch = FetchType.LAZY)
+    private List<ProjectDomain> domains = new ArrayList<>();
+
     @OneToMany(mappedBy = "skill", fetch = FetchType.LAZY)
     private List<StudentSkill> studentSkills = new ArrayList<>();
 
-    public Skill() {
-    }
+    public Skill() {}
 
-    public Long getId() {
-        return id;
-    }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
-    public String getName() {
-        return name;
-    }
+    public List<ProjectDomain> getDomains() { return domains; }
+    public void setDomains(List<ProjectDomain> domains) { this.domains = domains; }
 
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public List<StudentSkill> getStudentSkills() {
-        return studentSkills;
-    }
-
+    public List<StudentSkill> getStudentSkills() { return studentSkills; }
     public void setStudentSkills(List<StudentSkill> studentSkills) {
         this.studentSkills = studentSkills;
     }
@@ -66,9 +53,7 @@ public class Skill {
     }
 
     @Override
-    public int hashCode() {
-        return getClass().hashCode();
-    }
+    public int hashCode() { return getClass().hashCode(); }
 
     @Override
     public String toString() {

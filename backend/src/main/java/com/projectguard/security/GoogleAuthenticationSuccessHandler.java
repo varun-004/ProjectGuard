@@ -88,21 +88,12 @@ public class GoogleAuthenticationSuccessHandler
                 user.getRole().name()
         );
 
-        response.setContentType("application/json");
-        response.setCharacterEncoding("UTF-8");
+        String frontendRedirectUrl = "http://localhost:5173/oauth2/redirect" +
+                "?token=" + token +
+                "&username=" + user.getUsername() +
+                "&role=" + user.getRole().name();
 
-        response.getWriter().write("""
-                {
-                  "token": "%s",
-                  "username": "%s",
-                  "role": "%s",
-                  "provider": "GOOGLE"
-                }
-                """.formatted(
-                token,
-                user.getUsername(),
-                user.getRole().name()
-        ));
+        getRedirectStrategy().sendRedirect(request, response, frontendRedirectUrl);
     }
 
     private String createUniqueUsername(String name, String email) {
