@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import StudentProfile from './pages/StudentProfile';
+import Assessments from './pages/Assessments';
 import ProtectedRoute from './components/ProtectedRoute';
 import OAuth2RedirectHandler from './pages/OAuth2RedirectHandler';
 
@@ -26,6 +27,7 @@ function App() {
               <Route element={<ProtectedRoute />}>
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/profile" element={<StudentProfile />} />
+                <Route path="/assessments" element={<Assessments />} />
               </Route>
               
               {/* Fallback */}

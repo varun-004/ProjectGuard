@@ -149,4 +149,24 @@ public class StudentController {
     public ResponseEntity<List<SkillResponse>> getSkills() {
         return ResponseEntity.ok(studentService.getAllSkills());
     }
+
+    /**
+     * GET /api/students/meta/domains/{domainId}/technologies
+     * Returns the technology stacks for the given domain (e.g. "MERN", "Java Full Stack").
+     */
+    @GetMapping("/meta/domains/{domainId}/technologies")
+    public ResponseEntity<List<TechnologyResponse>> getTechnologiesByDomain(
+            @PathVariable Long domainId) {
+        return ResponseEntity.ok(studentService.getTechnologiesByDomain(domainId));
+    }
+
+    /**
+     * GET /api/students/meta/technologies/{technologyId}/skills
+     * Returns the skills for the given technology stack.
+     */
+    @GetMapping("/meta/technologies/{technologyId}/skills")
+    public ResponseEntity<List<SkillResponse>> getSkillsByTechnology(
+            @PathVariable Long technologyId) {
+        return ResponseEntity.ok(studentService.getSkillsByTechnology(technologyId));
+    }
 }

@@ -412,23 +412,42 @@ const ProfileForm = ({
         })) || []
     );
 
+    // Technology cascade state
+    const [technologies, setTechnologies] = useState([]);
+    const [selectedTechnologyId, setSelectedTechnologyId] = useState('');
     const [allSkills, setAllSkills] = useState([]);
-    
+    const [isLoadingTechs, setIsLoadingTechs] = useState(false);
+    const [isLoadingSkills, setIsLoadingSkills] = useState(false);
+
     // Photo state
     const [photoPreview, setPhotoPreview] = useState(initialData?.photoUrl || null);
     const [photoFile, setPhotoFile] = useState(null);
     const [removePhoto, setRemovePhoto] = useState(false);
 
-    // Initial load of skills if domain is set
+    // On mount (edit mode): if a domain is already set, load its technologies.
     useEffect(() => {
-        if (form.branchId && form.domainId) {
-            studentService.getSkillsByDomain(form.branchId, form.domainId)
+        if (initialDomainId) {
+            setIsLoadingTechs(true);
+            studentService.getTechnologiesByDomain(initialDomainId)
+                .then(res => setTechnologies(res.data || []))
+                .catch(() => setTechnologies([]))
+                .finally(() => setIsLoadingTechs(false));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Load skills whenever selectedTechnologyId changes
+    useEffect(() => {
+        if (selectedTechnologyId) {
+            setIsLoadingSkills(true);
+            studentService.getSkillsByTechnology(selectedTechnologyId)
                 .then(res => setAllSkills(res.data || []))
-                .catch(() => setAllSkills([]));
+                .catch(() => setAllSkills([]))
+                .finally(() => setIsLoadingSkills(false));
         } else {
             setAllSkills([]);
         }
-    }, [form.branchId, form.domainId]);
+    }, [selectedTechnologyId]);
 
     const handlePhotoSelect = (e) => {
         const file = e.target.files[0];
@@ -438,7 +457,7 @@ const ProfileForm = ({
             alert('File is too large. Maximum allowed size is 5 MB.');
             return;
         }
-        
+
         setPhotoFile(file);
         setPhotoPreview(URL.createObjectURL(file));
         setRemovePhoto(false);
@@ -478,6 +497,7 @@ const ProfileForm = ({
         );
     };
 
+    // Branch change → clear domain, technology, skills
     const handleBranchSelection = (e) => {
         const branchId = e.target.value;
 
@@ -487,11 +507,15 @@ const ProfileForm = ({
             domainId: '',
         }));
 
-        onBranchChange(branchId);
-        // Skills will clear due to useEffect on domainId
+        setTechnologies([]);
+        setSelectedTechnologyId('');
+        setAllSkills([]);
         setSkillEntries([]);
+
+        onBranchChange(branchId);
     };
 
+    // Domain change → load technologies, clear technology + skills
     const handleDomainSelection = (e) => {
         const domainId = e.target.value;
 
@@ -499,7 +523,27 @@ const ProfileForm = ({
             ...prev,
             domainId,
         }));
-        
+
+        setSelectedTechnologyId('');
+        setAllSkills([]);
+        setSkillEntries([]);
+
+        if (!domainId) {
+            setTechnologies([]);
+            return;
+        }
+
+        setIsLoadingTechs(true);
+        studentService.getTechnologiesByDomain(domainId)
+            .then(res => setTechnologies(res.data || []))
+            .catch(() => setTechnologies([]))
+            .finally(() => setIsLoadingTechs(false));
+    };
+
+    // Technology change → clear skill entries (skills reload via useEffect)
+    const handleTechnologySelection = (e) => {
+        const technologyId = e.target.value;
+        setSelectedTechnologyId(technologyId);
         setSkillEntries([]);
     };
 
@@ -549,14 +593,14 @@ const ProfileForm = ({
                             </svg>
                         )}
                     </div>
-                    
+
                     <div className="space-y-3 flex-1">
                         <div className="flex gap-3">
                             <label className="cursor-pointer bg-white px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors focus-within:ring-2 focus-within:ring-indigo-500">
                                 <span>Select Image</span>
                                 <input type="file" className="sr-only" accept=".jpg,.jpeg,.png,.webp" onChange={handlePhotoSelect} />
                             </label>
-                            
+
                             {(photoPreview || photoFile) && (
                                 <button type="button" onClick={handlePhotoRemove} className="px-4 py-2 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-md hover:bg-red-50 transition-colors">
                                     Remove
@@ -617,6 +661,34 @@ const ProfileForm = ({
                                 value={domain.id}
                             >
                                 {domain.name}
+                            </option>
+                        ))}
+                    </FormSelect>
+
+                    {/* Technology / Stack */}
+                    <FormSelect
+                        id="technology"
+                        label={isLoadingTechs ? 'Technology / Stack (loading…)' : 'Technology / Stack'}
+                        value={selectedTechnologyId}
+                        onChange={handleTechnologySelection}
+                        disabled={!form.domainId || isLoadingTechs}
+                    >
+                        <option value="">
+                            {!form.domainId
+                                ? '— Select domain first —'
+                                : isLoadingTechs
+                                    ? 'Loading…'
+                                    : technologies.length === 0
+                                        ? '— No technologies mapped —'
+                                        : '— Select technology —'}
+                        </option>
+
+                        {technologies.map((tech) => (
+                            <option
+                                key={tech.id}
+                                value={tech.id}
+                            >
+                                {tech.name}
                             </option>
                         ))}
                     </FormSelect>
@@ -720,6 +792,16 @@ const ProfileForm = ({
             {/* Skills */}
             <SectionCard title="Skills" icon="🛠️">
                 <div className="space-y-4">
+                    {!selectedTechnologyId && (
+                        <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                            ⚠️ Select a Technology / Stack above to load available skills.
+                        </p>
+                    )}
+
+                    {isLoadingSkills && (
+                        <p className="text-sm text-indigo-500 italic">Loading skills…</p>
+                    )}
+
                     <SkillsList
                         skillEntries={skillEntries}
                         onRemove={removeSkill}

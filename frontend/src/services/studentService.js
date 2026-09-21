@@ -38,6 +38,12 @@ const studentService = {
     getSkillsByDomain: (branchId, domainId) =>
         api.get(`/students/meta/branches/${branchId}/domains/${domainId}/skills`),
 
+    getTechnologiesByDomain: (domainId) =>
+        api.get(`/students/meta/domains/${domainId}/technologies`),
+
+    getSkillsByTechnology: (technologyId) =>
+        api.get(`/students/meta/technologies/${technologyId}/skills`),
+
     getSkills: () =>
         api.get('/students/meta/skills'),
 

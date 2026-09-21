@@ -22,6 +22,7 @@ public class StudentService {
     private final SkillRepository skillRepository;
     private final EngineeringBranchRepository branchRepository;
     private final ProjectDomainRepository domainRepository;
+    private final TechnologyRepository technologyRepository;
     private final UserRepository userRepository;
     private final ProfilePhotoService profilePhotoService;
 
@@ -34,6 +35,7 @@ public class StudentService {
             SkillRepository skillRepository,
             EngineeringBranchRepository branchRepository,
             ProjectDomainRepository domainRepository,
+            TechnologyRepository technologyRepository,
             UserRepository userRepository,
             ProfilePhotoService profilePhotoService) {
 
@@ -42,6 +44,7 @@ public class StudentService {
         this.skillRepository = skillRepository;
         this.branchRepository = branchRepository;
         this.domainRepository = domainRepository;
+        this.technologyRepository = technologyRepository;
         this.userRepository = userRepository;
         this.profilePhotoService = profilePhotoService;
     }
@@ -263,6 +266,25 @@ public class StudentService {
 
         return skillRepository.findByDomains_Id(domainId)
                 .stream()
+                .map(s -> new SkillResponse(s.getId(), s.getName()))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<TechnologyResponse> getTechnologiesByDomain(Long domainId) {
+        if (!domainRepository.existsById(domainId)) {
+            throw new RuntimeException("Domain not found with ID: " + domainId);
+        }
+        return technologyRepository.findByDomainId(domainId).stream()
+                .map(t -> new TechnologyResponse(t.getId(), t.getName()))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<SkillResponse> getSkillsByTechnology(Long technologyId) {
+        Technology tech = technologyRepository.findById(technologyId)
+                .orElseThrow(() -> new RuntimeException("Technology not found with ID: " + technologyId));
+        return tech.getSkills().stream()
                 .map(s -> new SkillResponse(s.getId(), s.getName()))
                 .collect(Collectors.toList());
     }

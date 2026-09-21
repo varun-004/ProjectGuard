@@ -38,6 +38,12 @@ const Navbar = () => {
                                 >
                                     My Profile
                                 </Link>
+                                <Link
+                                    to="/assessments"
+                                    className="text-gray-600 hover:text-indigo-600 font-medium text-sm transition-colors"
+                                >
+                                    Assessments
+                                </Link>
                                 <span className="text-gray-400 text-sm">|</span>
                                 <span className="text-gray-600 font-medium text-sm">Welcome, {user.username}</span>
                                 <button 
@@ -96,6 +102,13 @@ const Navbar = () => {
                                 className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50"
                             >
                                 My Profile
+                            </Link>
+                            <Link
+                                to="/assessments"
+                                onClick={() => setIsMenuOpen(false)}
+                                className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50"
+                            >
+                                Assessments
                             </Link>
                             <button 
                                 onClick={handleLogout} 

@@ -46,6 +46,16 @@ public class ProjectDomain {
     @OneToMany(mappedBy = "domain", fetch = FetchType.LAZY)
     private List<StudentProfile> studentProfiles = new ArrayList<>();
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_domain_id")
+    private ProjectDomain parentDomain;
+
+    @OneToMany(mappedBy = "parentDomain", fetch = FetchType.LAZY)
+    private List<ProjectDomain> subDomains = new ArrayList<>();
+
+    @OneToMany(mappedBy = "domain", fetch = FetchType.LAZY)
+    private List<Technology> technologies = new ArrayList<>();
+
     public ProjectDomain() {}
 
     public Long getId() { return id; }
@@ -67,6 +77,15 @@ public class ProjectDomain {
     public void setStudentProfiles(List<StudentProfile> studentProfiles) {
         this.studentProfiles = studentProfiles;
     }
+
+    public ProjectDomain getParentDomain() { return parentDomain; }
+    public void setParentDomain(ProjectDomain parentDomain) { this.parentDomain = parentDomain; }
+
+    public List<ProjectDomain> getSubDomains() { return subDomains; }
+    public void setSubDomains(List<ProjectDomain> subDomains) { this.subDomains = subDomains; }
+
+    public List<Technology> getTechnologies() { return technologies; }
+    public void setTechnologies(List<Technology> technologies) { this.technologies = technologies; }
 
     @Override
     public boolean equals(Object o) {

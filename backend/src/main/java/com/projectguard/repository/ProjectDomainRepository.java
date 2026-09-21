@@ -15,4 +15,6 @@ public interface ProjectDomainRepository
 
     /** Returns domains belonging to the given branch (via branch_domains join table). */
     List<ProjectDomain> findByBranches_Id(Long branchId);
+
+    List<ProjectDomain> findByParentDomainId(Long parentDomainId);
 }
