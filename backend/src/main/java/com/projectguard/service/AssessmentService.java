@@ -237,6 +237,7 @@ public class AssessmentService {
             ar.setScore(ss.score);
             ar.setPercentage(percentage);
             ar.setLevel(level);
+            ar.setCreatedAt(LocalDateTime.now());
             
             domainResult.addSkillResult(ar);
             
@@ -310,3 +311,4 @@ public class AssessmentService {
         SkillStats(Skill skill) { this.skill = skill; }
     }
 }
+

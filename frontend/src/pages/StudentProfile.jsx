@@ -433,7 +433,6 @@ const ProfileForm = ({
                 .catch(() => setTechnologies([]))
                 .finally(() => setIsLoadingTechs(false));
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Load skills whenever selectedTechnologyId changes

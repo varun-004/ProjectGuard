@@ -13,6 +13,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import jakarta.persistence.PrePersist;
 
 @Entity
 @Table(name = "assessment_results")
@@ -70,6 +71,14 @@ public class AssessmentResult {
     public ProficiencyLevel getLevel() { return level; }
     public void setLevel(ProficiencyLevel level) { this.level = level; }
 
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+   public LocalDateTime getCreatedAt() { return createdAt; }
+public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+@PrePersist
+protected void onCreate() {
+    if (createdAt == null) {
+        createdAt = LocalDateTime.now();
+    }
 }
+}
+

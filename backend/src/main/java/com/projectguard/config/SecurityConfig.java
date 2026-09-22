@@ -51,8 +51,7 @@ public class SecurityConfig {
 
     @Bean
     public AuthenticationManager authenticationManager(
-            AuthenticationConfiguration configuration)
-            throws Exception {
+            AuthenticationConfiguration configuration) throws Exception {
         return configuration.getAuthenticationManager();
     }
 
@@ -63,29 +62,35 @@ public class SecurityConfig {
         return googleOAuth2UserService;
     }
 
-    // ─── CORS ─────────────────────────────────────────────────────────────────
-
+    // CORS
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
+
         config.setAllowedOrigins(List.of("http://localhost:5173"));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(
+                List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")
+        );
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        UrlBasedCorsConfigurationSource source =
+                new UrlBasedCorsConfigurationSource();
+
         source.registerCorsConfiguration("/**", config);
+
         return source;
     }
 
-    // ─── Security filter chain ────────────────────────────────────────────────
-
+    // Security filter chain
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http)
             throws Exception {
 
         http
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .cors(cors ->
+                        cors.configurationSource(corsConfigurationSource())
+                )
 
                 .csrf(csrf -> csrf.disable())
 
@@ -94,52 +99,97 @@ public class SecurityConfig {
                 .httpBasic(basic -> basic.disable())
 
                 .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                        session.sessionCreationPolicy(
+                                SessionCreationPolicy.STATELESS
+                        )
                 )
 
                 .authorizeHttpRequests(auth -> auth
 
-                        // CORS preflight — always permit
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // CORS preflight
+                        .requestMatchers(
+                                HttpMethod.OPTIONS,
+                                "/**"
+                        ).permitAll()
 
-                        // Public auth endpoints
-                        .requestMatchers("/api/auth/**").permitAll()
+                        // Public authentication APIs
+                        .requestMatchers(
+                                "/api/auth/**"
+                        ).permitAll()
 
-                        // Actuator health
-                        .requestMatchers("/actuator/health").permitAll()
+                        // Actuator
+                        .requestMatchers(
+                                "/actuator/health"
+                        ).permitAll()
 
-                        // OAuth2 flow
-                        .requestMatchers("/oauth2/**").permitAll()
-                        .requestMatchers("/login/**").permitAll()
+                        // OAuth2
+                        .requestMatchers(
+                                "/oauth2/**"
+                        ).permitAll()
 
-                        // Uploaded photos are served publicly
-                        .requestMatchers("/uploads/**").permitAll()
+                        .requestMatchers(
+                                "/login/**"
+                        ).permitAll()
 
-                        // Admin
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        // Swagger / OpenAPI
+                        .requestMatchers(
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/v3/api-docs/**",
+                                "/swagger-resources/**",
+                                "/webjars/**"
+                        ).permitAll()
 
-                        // Student (both singular legacy path + new plural path)
-                        .requestMatchers("/api/student/**").hasRole("STUDENT")
-                        .requestMatchers("/api/students/**").hasRole("STUDENT")
+                        // Uploaded profile photos
+                        .requestMatchers(
+                                "/uploads/**"
+                        ).permitAll()
 
+                        // Admin APIs
+                        .requestMatchers(
+                                "/api/admin/**"
+                        ).hasRole("ADMIN")
+
+                        // Student APIs
+                        .requestMatchers(
+                                "/api/student/**"
+                        ).hasRole("STUDENT")
+
+                        .requestMatchers(
+                                "/api/students/**"
+                        ).hasRole("STUDENT")
+
+                        // Everything else requires authentication
                         .anyRequest().authenticated()
                 )
 
-                // Return 401 JSON for /api/** instead of redirecting to Google OAuth
-                .exceptionHandling(ex -> ex
-                        .defaultAuthenticationEntryPointFor(
-                                new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),
-                                request -> request.getRequestURI().startsWith("/api/")
+                // Return 401 for unauthenticated API requests
+                // instead of redirecting them to Google
+                .exceptionHandling(ex ->
+                        ex.defaultAuthenticationEntryPointFor(
+                                new HttpStatusEntryPoint(
+                                        HttpStatus.UNAUTHORIZED
+                                ),
+                                request ->
+                                        request.getRequestURI()
+                                                .startsWith("/api/")
                         )
                 )
 
-                .oauth2Login(oauth -> oauth
-                        .userInfoEndpoint(userInfo ->
-                                userInfo.userService(googleOAuth2UserService)
-                        )
-                        .successHandler(googleSuccessHandler)
+                // Google OAuth2
+                .oauth2Login(oauth ->
+                        oauth
+                                .userInfoEndpoint(userInfo ->
+                                        userInfo.userService(
+                                                googleOAuth2UserService
+                                        )
+                                )
+                                .successHandler(
+                                        googleSuccessHandler
+                                )
                 )
 
+                // JWT filter
                 .addFilterBefore(
                         jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class
