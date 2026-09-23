@@ -32,8 +32,10 @@ public class AssessmentController {
 
     /** GET /api/assessments/questions?skillIds=1,2,3 — load 10 questions combined for multiple skills */
     @GetMapping("/questions")
-    public ResponseEntity<List<AssessmentQuestionDto>> getQuestionsForSkills(@RequestParam List<Long> skillIds) {
-        return ResponseEntity.ok(assessmentService.getQuestionsForSkills(skillIds));
+    public ResponseEntity<com.projectguard.dto.assessment.AssessmentAttemptResponse> getQuestionsForSkills(
+            @RequestParam List<Long> skillIds,
+            Authentication authentication) {
+        return ResponseEntity.ok(assessmentService.getQuestionsForSkills(skillIds, authentication.getName()));
     }
 
     /** POST /api/assessments/submit — submit answers, receive overall and skill-wise results */

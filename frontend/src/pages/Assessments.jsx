@@ -33,6 +33,7 @@ const Assessments = () => {
     const [selectedSkillIds, setSelectedSkillIds] = useState([]);
 
     // ─── quiz ────────────────────────────────────────────────────────────────
+    const [attemptId,  setAttemptId]  = useState(null);
     const [questions,  setQuestions]  = useState([]);
     const [answers,    setAnswers]    = useState({});
 
@@ -112,8 +113,9 @@ const Assessments = () => {
         setError('');
         try {
             const res = await assessmentService.getQuestionsForSkills(skillIdsToUse);
-            if (res.data?.length > 0) {
-                setQuestions(res.data);
+            if (res.data?.questions?.length > 0) {
+                setAttemptId(res.data.attemptId);
+                setQuestions(res.data.questions);
                 setAnswers({});
                 if (skillIdsToUse !== selectedSkillIds) setSelectedSkillIds(skillIdsToUse);
                 setView('quiz');
@@ -142,7 +144,7 @@ const Assessments = () => {
                 questionId: Number(qid),
                 selectedOptionIndex: answers[qid],
             }));
-            const res = await assessmentService.submitAssessment(selectedSkillIds, submissions);
+            const res = await assessmentService.submitAssessment(attemptId, selectedSkillIds, submissions);
             setCurrentResult(res.data);
             setView('result');
         } catch (err) {
@@ -248,8 +250,12 @@ const Assessments = () => {
 
                     <div className="flex flex-wrap justify-center gap-8 mb-6">
                         <div>
-                            <span className="block text-5xl font-extrabold text-indigo-600">{currentResult.score}/20</span>
-                            <span className="text-sm text-gray-500">Overall Score</span>
+                            <span className="block text-5xl font-extrabold text-indigo-600">{currentResult.score}/{currentResult.maxWeightedScore}</span>
+                            <span className="text-sm text-gray-500">Weighted Score</span>
+                        </div>
+                        <div>
+                            <span className="block text-5xl font-extrabold text-indigo-600">{currentResult.correctAnswers}/{currentResult.totalQuestions}</span>
+                            <span className="text-sm text-gray-500">Correct Answers</span>
                         </div>
                         <div>
                             <span className="block text-5xl font-extrabold text-indigo-600">{Number(currentResult.percentage).toFixed(0)}%</span>
@@ -293,7 +299,7 @@ const Assessments = () => {
                                     {currentResult.skillResults.map(sr => (
                                         <tr key={sr.skillId} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-5 py-3 font-medium text-gray-800">{sr.skillName}</td>
-                                            <td className="px-5 py-3 text-gray-600">{sr.score} pts</td>
+                                            <td className="px-5 py-3 text-gray-600">{sr.score}/{sr.maxWeightedScore} pts</td>
                                             <td className="px-5 py-3 text-gray-600">{Number(sr.percentage).toFixed(0)}%</td>
                                             <td className="px-5 py-3">
                                                 <span className={`inline-block px-2 py-0.5 text-xs font-bold uppercase rounded border ${levelBadge(sr.level)}`}>
@@ -471,7 +477,7 @@ const Assessments = () => {
                                                     {r.level}
                                                 </span>
                                                 <p className="text-sm font-semibold text-gray-700 mt-1">
-                                                    {Number(r.percentage).toFixed(0)}% · {r.score}/20 pts
+                                                    {Number(r.percentage).toFixed(0)}% · {r.score}/{r.maxWeightedScore} pts
                                                 </p>
                                             </div>
                                         </div>

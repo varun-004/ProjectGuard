@@ -9,8 +9,8 @@ const assessmentService = {
     getQuestionsForSkills: (skillIds) =>
         api.get(`/assessments/questions?skillIds=${skillIds.join(',')}`),
 
-    submitAssessment: (skillIds, answers) =>
-        api.post('/assessments/submit', { skillIds, answers }),
+    submitAssessment: (attemptId, skillIds, answers) =>
+        api.post('/assessments/submit', { attemptId, skillIds, answers }),
 
     getMyResults: () =>
         api.get('/assessments/my-results'),

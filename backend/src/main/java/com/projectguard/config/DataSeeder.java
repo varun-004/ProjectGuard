@@ -469,91 +469,91 @@ EngineeringBranch civil = branch("Civil Engineering", "Civil Engineering");
 
     private void ensureQuestions(Skill skill) {
         List<AssessmentQuestion> existing = questionRepository.findBySkillId(skill.getId());
-        if (existing.size() >= 10) return;
+        if (existing.size() >= 50) return;
 
         // Delete any partial seed
         if (!existing.isEmpty()) questionRepository.deleteAll(existing);
 
         String n = skill.getName();
-        saveQ(skill, "What is " + n + " primarily used for?",
-                AssessmentQuestion.Difficulty.EASY, 0,
-                n + " is a fundamental tool/language in its domain.",
-                "Its core domain use-case",
-                "As an art tool",
-                "As a culinary ingredient",
-                "As a transport method");
+        
+        String[][] easyTemplates = {
+            {"What is %s primarily used for?", "Which of the following best describes %s?", "How do you set up a basic environment for %s?"},
+            {"In what scenario would %s be most beneficial?", "What is the primary role of %s in a project?", "What are the initial steps to configure %s?"},
+            {"Why do developers choose %s for their projects?", "How does %s compare to its basic alternatives?", "What is required to start building with %s?"},
+            {"What is a key fundamental concept of %s?", "Which statement accurately defines %s?", "How is a %s workspace initialized?"},
+            {"For what specific problem was %s designed?", "What is the industry consensus on %s?", "Where can you find the official setup guide for %s?"}
+        };
 
-        saveQ(skill, "Which of the following best describes " + n + "?",
-                AssessmentQuestion.Difficulty.EASY, 1,
-                n + " is widely recognized as an industry-standard.",
-                "A deprecated legacy tool",
-                "An industry-standard technology",
-                "A social network",
-                "A sports activity");
+        String[][] mediumTemplates = {
+            {"What is a core feature of %s?", "How does %s handle scalability?", "What design pattern is most commonly associated with %s?", "What is the primary advantage of using %s over alternatives?"},
+            {"Which advanced capability defines %s?", "How can %s be scaled horizontally?", "Which architectural pattern suits %s best?", "What makes %s highly efficient in production?"},
+            {"What hidden feature of %s is often overlooked?", "How does %s manage high concurrency?", "How does %s enforce code maintainability?", "Why is %s preferred for enterprise applications?"},
+            {"What is the lifecycle process in %s?", "How do you balance load in a %s environment?", "Which anti-pattern should be avoided in %s?", "What is the most significant performance benefit of %s?"},
+            {"How does %s integrate with external APIs?", "What caching strategies work best with %s?", "How does %s implement modularity?", "What is the standard deployment strategy for %s?"}
+        };
 
-        saveQ(skill, "How do you set up a basic environment for " + n + "?",
-                AssessmentQuestion.Difficulty.EASY, 2,
-                "Setting up " + n + " requires installing its environment and dependencies.",
-                "Buy expensive hardware",
-                "Install OS from scratch",
-                "Install " + n + " environment/SDK",
-                "Upload to App Store");
+        String[][] hardTemplates = {
+            {"How would you optimize performance in a large-scale %s project?", "Explain how you would debug a critical failure in %s.", "What is the algorithmic/computational complexity consideration most important in %s?"},
+            {"How do you resolve memory leaks in a %s application?", "What is the root cause of common race conditions in %s?", "How do you achieve O(1) time complexity for state retrieval in %s?"},
+            {"What is the most effective way to profile a %s system?", "How would you recover a corrupted state in %s?", "How does %s manage garbage collection and memory allocation?"},
+            {"How do you implement zero-downtime deployments for %s?", "What tracing techniques isolate bottlenecks in %s?", "How does %s handle eventual consistency in distributed setups?"},
+            {"What is the impact of heavy thread contention in %s?", "How do you debug asynchronous deadlocks in %s?", "What are the space complexity trade-offs when caching in %s?"}
+        };
 
-        saveQ(skill, "What is a core feature of " + n + "?",
-                AssessmentQuestion.Difficulty.MEDIUM, 0,
-                n + " provides a specific core capability central to its domain.",
-                "Its defining core capability",
-                "Making coffee",
-                "Playing video games",
-                "Painting walls");
+        for (int i = 0; i < 5; i++) {
+            // EASY: 3 questions per loop = 15 total
+            saveQ(skill, String.format(easyTemplates[i][0], n),
+                    AssessmentQuestion.Difficulty.EASY, 0,
+                    n + " is a fundamental tool/language in its domain.",
+                    "Its core domain use-case", "As an art tool", "As a culinary ingredient", "As a transport method");
 
-        saveQ(skill, "How does " + n + " handle scalability?",
-                AssessmentQuestion.Difficulty.MEDIUM, 1,
-                n + " scales using design patterns appropriate to its domain.",
-                "It does not scale",
-                "Through domain-specific design patterns",
-                "By buying more RAM",
-                "Through manual tuning only");
+            saveQ(skill, String.format(easyTemplates[i][1], n),
+                    AssessmentQuestion.Difficulty.EASY, 1,
+                    n + " is widely recognized as an industry-standard.",
+                    "A deprecated legacy tool", "An industry-standard technology", "A social network", "A sports activity");
 
-        saveQ(skill, "What design pattern is most commonly associated with " + n + "?",
-                AssessmentQuestion.Difficulty.MEDIUM, 2,
-                n + " uses standard industry design patterns.",
-                "Anti-pattern",
-                "Spaghetti architecture",
-                "Standard domain design pattern",
-                "No pattern at all");
+            saveQ(skill, String.format(easyTemplates[i][2], n),
+                    AssessmentQuestion.Difficulty.EASY, 2,
+                    "Setting up " + n + " requires installing its environment and dependencies.",
+                    "Buy expensive hardware", "Install OS from scratch", "Install " + n + " environment/SDK", "Upload to App Store");
 
-        saveQ(skill, "What is the primary advantage of using " + n + " over alternatives?",
-                AssessmentQuestion.Difficulty.MEDIUM, 3,
-                n + " offers efficiency and standardization in its specific domain.",
-                "It is slower",
-                "It is unsupported",
-                "It is expensive",
-                "Efficiency and domain standardization");
+            // MEDIUM: 4 questions per loop = 20 total
+            saveQ(skill, String.format(mediumTemplates[i][0], n),
+                    AssessmentQuestion.Difficulty.MEDIUM, 0,
+                    n + " provides a specific core capability central to its domain.",
+                    "Its defining core capability", "Making coffee", "Playing video games", "Painting walls");
 
-        saveQ(skill, "How would you optimize performance in a large-scale " + n + " project?",
-                AssessmentQuestion.Difficulty.HARD, 0,
-                "Large-scale " + n + " optimization requires profiling and architecture decisions.",
-                "Profiling and strategic architecture",
-                "Rebooting the server",
-                "Reinstalling the OS",
-                "Ignoring the issue");
+            saveQ(skill, String.format(mediumTemplates[i][1], n),
+                    AssessmentQuestion.Difficulty.MEDIUM, 1,
+                    n + " scales using design patterns appropriate to its domain.",
+                    "It does not scale", "Through domain-specific design patterns", "By buying more RAM", "Through manual tuning only");
 
-        saveQ(skill, "Explain how you would debug a critical failure in " + n + ".",
-                AssessmentQuestion.Difficulty.HARD, 1,
-                "Debugging " + n + " requires systematic log analysis and root-cause investigation.",
-                "Delete and restart",
-                "Systematic log analysis and root-cause investigation",
-                "Call vendor support immediately",
-                "Blame hardware");
+            saveQ(skill, String.format(mediumTemplates[i][2], n),
+                    AssessmentQuestion.Difficulty.MEDIUM, 2,
+                    n + " uses standard industry design patterns.",
+                    "Anti-pattern", "Spaghetti architecture", "Standard domain design pattern", "No pattern at all");
 
-        saveQ(skill, "What is the algorithmic/computational complexity consideration most important in " + n + "?",
-                AssessmentQuestion.Difficulty.HARD, 2,
-                n + " implementations must account for time and space complexity of core algorithms.",
-                "O(n!) is acceptable",
-                "Complexity is irrelevant",
-                "Time and space complexity of core algorithms",
-                "Only memory matters");
+            saveQ(skill, String.format(mediumTemplates[i][3], n),
+                    AssessmentQuestion.Difficulty.MEDIUM, 3,
+                    n + " offers efficiency and standardization in its specific domain.",
+                    "It is slower", "It is unsupported", "It is expensive", "Efficiency and domain standardization");
+
+            // HARD: 3 questions per loop = 15 total
+            saveQ(skill, String.format(hardTemplates[i][0], n),
+                    AssessmentQuestion.Difficulty.HARD, 0,
+                    "Large-scale " + n + " optimization requires profiling and architecture decisions.",
+                    "Profiling and strategic architecture", "Rebooting the server", "Reinstalling the OS", "Ignoring the issue");
+
+            saveQ(skill, String.format(hardTemplates[i][1], n),
+                    AssessmentQuestion.Difficulty.HARD, 1,
+                    "Debugging " + n + " requires systematic log analysis and root-cause investigation.",
+                    "Delete and restart", "Systematic log analysis and root-cause investigation", "Call vendor support immediately", "Blame hardware");
+
+            saveQ(skill, String.format(hardTemplates[i][2], n),
+                    AssessmentQuestion.Difficulty.HARD, 2,
+                    n + " implementations must account for time and space complexity of core algorithms.",
+                    "O(n!) is acceptable", "Complexity is irrelevant", "Time and space complexity of core algorithms", "Only memory matters");
+        }
     }
 
     private void saveQ(Skill skill, String text, AssessmentQuestion.Difficulty diff,

@@ -8,6 +8,7 @@ public class AssessmentResultDto {
     private Long skillId;
     private String skillName;
     private Integer score;
+    private Integer maxWeightedScore;
     private Double percentage;
     private String level;
     private LocalDateTime createdAt;
@@ -22,6 +23,8 @@ public class AssessmentResultDto {
     public void setSkillName(String skillName) { this.skillName = skillName; }
     public Integer getScore() { return score; }
     public void setScore(Integer score) { this.score = score; }
+    public Integer getMaxWeightedScore() { return maxWeightedScore; }
+    public void setMaxWeightedScore(Integer maxWeightedScore) { this.maxWeightedScore = maxWeightedScore; }
     public Double getPercentage() { return percentage; }
     public void setPercentage(Double percentage) { this.percentage = percentage; }
     public String getLevel() { return level; }

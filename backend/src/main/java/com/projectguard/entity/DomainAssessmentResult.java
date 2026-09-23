@@ -34,6 +34,9 @@ public class DomainAssessmentResult {
     @OneToMany(mappedBy = "domainAssessmentResult", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<AssessmentResult> skillResults = new ArrayList<>();
 
+    @OneToMany(mappedBy = "domainAssessmentResult", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<AssessmentAttemptReview> attemptReviews = new ArrayList<>();
+
     public DomainAssessmentResult() {}
 
     public Long getId() { return id; }
@@ -60,5 +63,13 @@ public class DomainAssessmentResult {
     public void addSkillResult(AssessmentResult result) {
         skillResults.add(result);
         result.setDomainAssessmentResult(this);
+    }
+
+    public List<AssessmentAttemptReview> getAttemptReviews() { return attemptReviews; }
+    public void setAttemptReviews(List<AssessmentAttemptReview> attemptReviews) { this.attemptReviews = attemptReviews; }
+
+    public void addAttemptReview(AssessmentAttemptReview review) {
+        attemptReviews.add(review);
+        review.setDomainAssessmentResult(this);
     }
 }
