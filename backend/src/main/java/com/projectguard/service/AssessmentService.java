@@ -6,6 +6,8 @@ import com.projectguard.entity.*;
 import com.projectguard.entity.enums.ProficiencyLevel;
 import com.projectguard.repository.*;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -90,11 +92,23 @@ public class AssessmentService {
 
     @Transactional
     public AssessmentAttemptResponse getQuestionsForSkills(List<Long> skillIds, String username) {
+        if (skillIds == null || skillIds.isEmpty()) {
+            throw new IllegalArgumentException("skillIds must be a non-empty array");
+        }
+
+        List<Long> normalizedSkillIds = skillIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        if (normalizedSkillIds.isEmpty()) {
+            throw new IllegalArgumentException("skillIds must contain valid IDs");
+        }
+
         StudentProfile profile = getProfileByUsername(username);
 
-        List<AssessmentQuestion> allQuestions = questionRepository.findAll().stream()
-                .filter(q -> skillIds.contains(q.getSkill().getId()))
-                .collect(Collectors.toList());
+        List<AssessmentQuestion> allQuestions =
+                questionRepository.findBySkillIdIn(normalizedSkillIds);
 
         // Gather recently used questions
         List<AssessmentAttempt> recentAttempts = attemptRepository.findByStudentProfileIdOrderByCreatedAtDesc(profile.getId())
@@ -109,9 +123,14 @@ public class AssessmentService {
         List<AssessmentQuestion> hard = filterByDifficulty(allQuestions, AssessmentQuestion.Difficulty.HARD);
 
         List<AssessmentQuestion> selected = new ArrayList<>();
-        selected.addAll(fairDistribute(easy, skillIds, 3, recentQuestionIds));
-        selected.addAll(fairDistribute(medium, skillIds, 4, recentQuestionIds));
-        selected.addAll(fairDistribute(hard, skillIds, 3, recentQuestionIds));
+        selected.addAll(fairDistribute(easy, normalizedSkillIds, 3, recentQuestionIds));
+        selected.addAll(fairDistribute(medium, normalizedSkillIds, 4, recentQuestionIds));
+        selected.addAll(fairDistribute(hard, normalizedSkillIds, 3, recentQuestionIds));
+
+        if (selected.size() != 10) {
+            throw new IllegalStateException(
+                    "Unable to generate a complete assessment. Expected 10 questions but got " + selected.size());
+        }
 
         Collections.shuffle(selected);
 
@@ -176,30 +195,90 @@ public class AssessmentService {
         return list.stream().filter(q -> q.getDifficulty() == diff).collect(Collectors.toList());
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public DomainAssessmentResultDto submitAssessment(String username, AssessmentSubmitRequest request) {
-        if (request.getAttemptId() == null) {
-            throw new RuntimeException("attemptId must be provided");
+        if (request == null) {
+            throw new IllegalArgumentException("Assessment request must be provided");
+        }
+        if (request.getAttemptId() == null || request.getAttemptId().isBlank()) {
+            throw new IllegalArgumentException("attemptId must be provided");
         }
         if (request.getSkillIds() == null || request.getSkillIds().isEmpty()) {
-            throw new RuntimeException("skillIds must be a non-empty array");
+            throw new IllegalArgumentException("skillIds must be a non-empty array");
         }
         if (request.getAnswers() == null) {
-            throw new RuntimeException("answers list must be provided");
+            throw new IllegalArgumentException("answers list must be provided");
+        }
+
+        List<Long> requestedSkillIds = request.getSkillIds().stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        if (requestedSkillIds.isEmpty()) {
+            throw new IllegalArgumentException("skillIds must contain valid IDs");
         }
 
         StudentProfile profile = getProfileByUsername(username);
-        
-        AssessmentAttempt attempt = attemptRepository.findByAttemptId(request.getAttemptId())
-                .orElseThrow(() -> new RuntimeException("Invalid attempt ID"));
-                
-        if (!attempt.getStudentProfile().getId().equals(profile.getId())) {
-            throw new RuntimeException("Attempt does not belong to this user");
-        }
-        
-        List<Long> issuedQuestionIds = attempt.getIssuedQuestions().stream()
-                .map(AssessmentQuestion::getId).collect(Collectors.toList());
 
-        List<Long> skillIds = request.getSkillIds();
+        AssessmentAttempt attempt = attemptRepository.findByAttemptId(request.getAttemptId())
+                .orElseThrow(() -> new IllegalArgumentException("Invalid attempt ID"));
+
+        if (attempt.getStudentProfile() == null ||
+                !attempt.getStudentProfile().getId().equals(profile.getId())) {
+            throw new SecurityException("Attempt does not belong to this user");
+        }
+
+        if (attempt.getIssuedQuestions() == null || attempt.getIssuedQuestions().isEmpty()) {
+            throw new IllegalStateException("Assessment attempt has no issued questions");
+        }
+
+        Set<Long> issuedQuestionIds = attempt.getIssuedQuestions().stream()
+                .map(AssessmentQuestion::getId)
+                .collect(Collectors.toSet());
+
+        // Source of truth for scoring: questions stored in this attempt.
+        if (attempt.isSubmitted()) {
+            throw new IllegalStateException("Assessment attempt has already been submitted");
+        }
+
+        Set<Long> attemptSkillIds = attempt.getIssuedQuestions().stream()
+                .map(q -> q.getSkill().getId())
+                .collect(Collectors.toSet());
+
+        // Frontend skill IDs must match the skills actually issued in this attempt.
+        if (!attemptSkillIds.equals(new HashSet<>(requestedSkillIds))) {
+            throw new IllegalArgumentException("Submitted skills do not match the issued assessment");
+        }
+
+        Set<Long> seenQuestionIds = new HashSet<>();
+        for (AssessmentSubmitRequest.AnswerSubmission answer : request.getAnswers()) {
+            if (answer == null ||
+                    answer.getQuestionId() == null ||
+                    answer.getSelectedOptionIndex() == null) {
+                throw new IllegalArgumentException(
+                        "questionId and selectedOptionIndex must be provided");
+            }
+
+            if (!seenQuestionIds.add(answer.getQuestionId())) {
+                throw new IllegalArgumentException(
+                        "Duplicate question ID " + answer.getQuestionId() + " in submission");
+            }
+
+            if (!issuedQuestionIds.contains(answer.getQuestionId())) {
+                throw new IllegalArgumentException(
+                        "Question ID " + answer.getQuestionId() +
+                                " was not issued in this attempt");
+            }
+
+            if (answer.getSelectedOptionIndex() < 0 ||
+                    answer.getSelectedOptionIndex() > 3) {
+                throw new IllegalArgumentException(
+                        "Invalid option index for question " + answer.getQuestionId());
+            }
+        }
+
+        List<Long> skillIds = new ArrayList<>(attemptSkillIds);
 
         DomainAssessmentResult domainResult = new DomainAssessmentResult();
         domainResult.setStudentProfile(profile);
@@ -207,7 +286,8 @@ public class AssessmentService {
 
         Map<Long, SkillStats> skillStatsMap = new HashMap<>();
         for (Long sid : skillIds) {
-            Skill skill = skillRepository.findById(sid).orElseThrow();
+            Skill skill = skillRepository.findById(sid)
+                    .orElseThrow(() -> new IllegalArgumentException("Skill not found: " + sid));
             skillStatsMap.put(sid, new SkillStats(skill));
         }
 
@@ -225,7 +305,8 @@ public class AssessmentService {
                 throw new RuntimeException("Question ID " + answer.getQuestionId() + " was not issued in this attempt");
             }
             AssessmentQuestion question = questionRepository.findById(answer.getQuestionId())
-                    .orElseThrow(() -> new RuntimeException("Question not found"));
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Question not found: " + answer.getQuestionId()));
 
             boolean isCorrect = question.getCorrectOptionIndex().equals(answer.getSelectedOptionIndex());
             int points = 0;
@@ -257,7 +338,7 @@ public class AssessmentService {
 
         // Ensure questions that were not answered count towards maxPossibleScore but with 0 points
         for (AssessmentQuestion q : attempt.getIssuedQuestions()) {
-            boolean answered = request.getAnswers().stream().anyMatch(a -> a.getQuestionId().equals(q.getId()));
+            boolean answered = seenQuestionIds.contains(q.getId());
             if (!answered) {
                 int points = switch (q.getDifficulty()) {
                     case EASY -> 1;
@@ -309,6 +390,12 @@ public class AssessmentService {
         }
 
         DomainAssessmentResult saved = domainResultRepository.save(domainResult);
+
+        // Mark only after the complete result graph has been successfully saved.
+        attempt.setSubmitted(true);
+        attempt.setSubmittedAt(LocalDateTime.now());
+        attemptRepository.save(attempt);
+
         DomainAssessmentResultDto dto = mapToDomainDto(saved);
         // Correct answers and total questions will be mapped by mapToDomainDto implicitly, 
         // but we'll populate them there by reading attemptReviews
@@ -322,12 +409,11 @@ public class AssessmentService {
     }
 
     @Transactional(readOnly = true)
-    public List<DomainAssessmentResultDto> getMyResults(String username) {
+    public Page<DomainAssessmentResultDto> getMyResults(String username, Pageable pageable) {
         StudentProfile profile = getProfileByUsername(username);
-        return domainResultRepository.findByStudentProfileIdOrderByCreatedAtDesc(profile.getId())
-                .stream()
-                .map(this::mapToDomainDto)
-                .collect(Collectors.toList());
+        return domainResultRepository
+                .findByStudentProfileIdOrderByCreatedAtDesc(profile.getId(), pageable)
+                .map(this::mapToDomainDto);
     }
 
     private DomainAssessmentResultDto mapToDomainDto(DomainAssessmentResult result) {
@@ -413,4 +499,3 @@ public class AssessmentService {
         SkillStats(Skill skill) { this.skill = skill; }
     }
 }
-

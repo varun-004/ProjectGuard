@@ -27,6 +27,11 @@ const Assessments = () => {
     const [technologies, setTechnologies] = useState([]);
     const [skills,       setSkills]       = useState([]);
     const [results,      setResults]      = useState([]);
+    const [currentPage,  setCurrentPage]  = useState(0);
+    const [totalPages,   setTotalPages]   = useState(0);
+    const [hasNext,      setHasNext]      = useState(false);
+    const [hasPrevious,  setHasPrevious]  = useState(false);
+    const [historyLoading, setHistoryLoading] = useState(false);
 
     // ─── selection ───────────────────────────────────────────────────────────
     const [selectedTech,     setSelectedTech]     = useState(null);  // { id, name }
@@ -52,22 +57,45 @@ const Assessments = () => {
     }, [view]);
 
     // ─── Data loading ─────────────────────────────────────────────────────────
+    const loadResults = async (page = 0) => {
+        setHistoryLoading(true);
+        try {
+            const res = await assessmentService.getMyResults(page, 10);
+            const data = res.data || {};
+
+            setResults(Array.isArray(data.content) ? data.content : []);
+            setCurrentPage(data.number ?? page);
+            setTotalPages(data.totalPages ?? 0);
+            setHasNext(Boolean(data.last === false));
+            setHasPrevious(Boolean(data.first === false));
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to load assessment history.');
+            setResults([]);
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+
     const loadDashboard = async () => {
         setLoading(true);
         setError('');
         try {
-            const [profileRes, resultsRes] = await Promise.all([
+            const [profileRes] = await Promise.all([
                 studentService.getMyProfile(),
-                assessmentService.getMyResults(),
             ]);
+
             const p = profileRes.data;
             setProfile(p);
-            setResults(resultsRes.data || []);
+
+            // Load first page of history
+            await loadResults(0);
 
             // Load technologies for the user's domain
             if (p?.domainId) {
                 const techRes = await studentService.getTechnologiesByDomain(p.domainId);
                 setTechnologies(techRes.data || []);
+            } else {
+                setTechnologies([]);
             }
         } catch (err) {
             if (err.response?.status === 400 || err.response?.status === 404) {
@@ -497,6 +525,32 @@ const Assessments = () => {
                                         )}
                                     </div>
                                 ))}
+                            </div>
+                        )}
+
+                        {totalPages > 1 && (
+                            <div className="flex items-center justify-between mt-5 pt-4 border-t border-gray-200">
+                                <button
+                                    type="button"
+                                    disabled={!hasPrevious || historyLoading}
+                                    onClick={() => loadResults(currentPage - 1)}
+                                    className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                    ← Previous
+                                </button>
+
+                                <span className="text-sm text-gray-500">
+                                    Page {currentPage + 1} of {totalPages}
+                                </span>
+
+                                <button
+                                    type="button"
+                                    disabled={!hasNext || historyLoading}
+                                    onClick={() => loadResults(currentPage + 1)}
+                                    className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                    Next →
+                                </button>
                             </div>
                         )}
                     </div>
