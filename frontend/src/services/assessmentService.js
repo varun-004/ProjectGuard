@@ -12,12 +12,8 @@ const assessmentService = {
     submitAssessment: (attemptId, skillIds, answers) =>
         api.post('/assessments/submit', { attemptId, skillIds, answers }),
 
-    submitAssessment: (attemptId, skillIds, answers) =>
-    api.post('/assessments/submit', {
-        attemptId,
-        skillIds,
-        answers
-    }),
+    getMyResults: (page = 0, size = 10) =>
+        api.get(`/assessments/my-results?page=${page}&size=${size}&sort=createdAt,desc`),
 };
 
 export default assessmentService;

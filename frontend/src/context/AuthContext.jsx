@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 
 export const AuthContext = createContext(null);
@@ -46,14 +46,14 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const googleLogin = (token, username, role) => {
-        localStorage.setItem('token', token);
-        localStorage.setItem('username', username);
-        localStorage.setItem('role', role);
-        
-        setToken(token);
-        setUser({ username, role });
-    };
+    const googleLogin = useCallback((token, username, role) => {
+    localStorage.setItem('token', token);
+    localStorage.setItem('username', username);
+    localStorage.setItem('role', role);
+
+    setToken(token);
+    setUser({ username, role });
+}, []);
 
     const logout = () => {
         localStorage.removeItem('token');

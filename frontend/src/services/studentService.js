@@ -31,9 +31,10 @@ const studentService = {
     getDomains: () =>
         api.get('/students/meta/domains'),
 
-    // NEW
-    getDomainsByBranch: (branchId) =>
-        api.get(`/students/meta/branches/${branchId}/domains`),
+    getDomainsByBranch: (branchId, academicLevel) => {
+        const params = academicLevel ? { academicLevel } : {};
+        return api.get(`/students/meta/branches/${branchId}/domains`, { params });
+    },
 
     getSkillsByDomain: (branchId, domainId) =>
         api.get(`/students/meta/branches/${branchId}/domains/${domainId}/skills`),
