@@ -47,12 +47,16 @@ public class DataSeeder implements CommandLineRunner {
         } catch (Exception e) {}
 
         // ─── BRANCHES ─────────────────────────────────────────────────────────
-       EngineeringBranch cse  = branch("Computer Science and Engineering", "Computer Science and Engineering");
-EngineeringBranch ise  = branch("Information Science and Engineering", "Information Science and Engineering");
-EngineeringBranch ece  = branch("Electronics and Communication Engineering", "Electronics and Communication Engineering");
-EngineeringBranch eee  = branch("Electrical and Electronics Engineering", "Electrical and Electronics Engineering");
-EngineeringBranch mech = branch("Mechanical Engineering", "Mechanical Engineering");
-EngineeringBranch civil = branch("Civil Engineering", "Civil Engineering");
+        EngineeringBranch cse   = branch("Computer Science and Engineering", "Computer Science and Engineering");
+        EngineeringBranch ise   = branch("Information Science and Engineering", "Information Science and Engineering");
+        EngineeringBranch ece   = branch("Electronics and Communication Engineering", "Electronics and Communication Engineering");
+        EngineeringBranch eee   = branch("Electrical and Electronics Engineering", "Electrical and Electronics Engineering");
+        EngineeringBranch mech  = branch("Mechanical Engineering", "Mechanical Engineering");
+        EngineeringBranch civil = branch("Civil Engineering", "Civil Engineering");
+        EngineeringBranch bca   = branch("Bachelor of Computer Applications (BCA)", "Bachelor of Computer Applications (BCA)");
+        EngineeringBranch mca   = branch("Master of Computer Applications (MCA)", "Master of Computer Applications (MCA)");
+        EngineeringBranch bscCs = branch("B.Sc Computer Science", "B.Sc Computer Science");
+        EngineeringBranch mscCs = branch("M.Sc Computer Science", "M.Sc Computer Science");
 
         // ─── SKILLS (global, de-duplicated by name) ────────────────────────────
         // CSE/ISE
@@ -238,6 +242,10 @@ EngineeringBranch civil = branch("Civil Engineering", "Civil Engineering");
 
         link(cse, aiMl, webDev, mobileApp, dataSci, cyberSec, cloudComp);
         link(ise, aiMl, webDev, mobileApp, dataSci, cyberSec, cloudComp);
+        link(bca, aiMl, webDev, mobileApp, dataSci, cyberSec, cloudComp);
+        link(mca, aiMl, webDev, mobileApp, dataSci, cyberSec, cloudComp);
+        link(bscCs, aiMl, webDev, mobileApp, dataSci, cyberSec, cloudComp);
+        link(mscCs, aiMl, webDev, mobileApp, dataSci, cyberSec, cloudComp);
 
         tech("Python ML",          aiMl, python, numpy, pandas, statistics, ml, dl, sklearn, tfpt);
         tech("Scikit-learn",       aiMl, python, numpy, pandas, statistics, ml, dl, sklearn, tfpt);

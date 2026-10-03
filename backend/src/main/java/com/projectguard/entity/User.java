@@ -37,6 +37,9 @@ public class User {
     @Column(name = "username", nullable = false, length = 50)
     private String username;
 
+    @Column(name = "name", length = 100)
+    private String name;
+
     @Column(name = "email", nullable = false, length = 150)
     private String email;
 
@@ -90,6 +93,14 @@ public class User {
 
     public void setUsername(String username) {
         this.username = username;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 
     public String getEmail() {

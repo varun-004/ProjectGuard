@@ -56,6 +56,7 @@ public class GoogleOAuth2UserService
 
                 user.setUsername(createUniqueUsername(name, email));
                 user.setEmail(email);
+                user.setName(name != null && !name.isBlank() ? name : email.substring(0, email.indexOf("@")));
                 user.setRole(Role.STUDENT);
                 user.setAuthProvider(AuthProvider.GOOGLE);
                 user.setProviderId(googleId);
@@ -64,6 +65,9 @@ public class GoogleOAuth2UserService
             } else {
                 user.setAuthProvider(AuthProvider.GOOGLE);
                 user.setProviderId(googleId);
+                if (user.getName() == null && name != null) {
+                    user.setName(name);
+                }
             }
 
             userRepository.save(user);

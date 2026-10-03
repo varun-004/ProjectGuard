@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 58321
 
 spring:
   datasource:
@@ -31,12 +31,14 @@ spring:
       client:
         registration:
           google:
-            client-id: ${GOOGLE_CLIENT_ID:default-client-id}
-            client-secret: ${GOOGLE_CLIENT_SECRET:default-client-secret}
+           	client-id: ${GOOGLE_CLIENT_ID}
+		client-secret: ${GOOGLE_CLIENT_SECRET}
             scope:
               - openid
               - profile
               - email
+            redirect-uri: "http://localhost:58321/login/oauth2/code/google"
+
 
 management:
   endpoints:
@@ -50,3 +52,6 @@ management:
 
 jwt:
   secret: ${JWT_SECRET:this_is_a_default_secret_key_for_local_development_only_make_sure_it_is_long_enough}
+
+app:
+  base-url: http://localhost:58321

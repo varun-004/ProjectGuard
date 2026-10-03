@@ -5,10 +5,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -26,6 +29,71 @@ public class GlobalExceptionHandler {
                 HttpStatus.UNAUTHORIZED,
                 "Unauthorized",
                 "Invalid username or password",
+                request
+        );
+    }
+
+    @ExceptionHandler(UsernameNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleUsernameNotFound(
+            UsernameNotFoundException exception,
+            HttpServletRequest request) {
+
+        return build(
+                HttpStatus.UNAUTHORIZED,
+                "Unauthorized",
+                "Invalid username or password",
+                request
+        );
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiErrorResponse> handleAuthenticationException(
+            AuthenticationException exception,
+            HttpServletRequest request) {
+
+        return build(
+                HttpStatus.UNAUTHORIZED,
+                "Unauthorized",
+                safeMessage(exception, "Authentication failed"),
+                request
+        );
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleResourceNotFound(
+            ResourceNotFoundException exception,
+            HttpServletRequest request) {
+
+        return build(
+                HttpStatus.NOT_FOUND,
+                "Not Found",
+                safeMessage(exception, "Resource not found"),
+                request
+        );
+    }
+
+    @ExceptionHandler(DuplicateResourceException.class)
+    public ResponseEntity<ApiErrorResponse> handleDuplicateResource(
+            DuplicateResourceException exception,
+            HttpServletRequest request) {
+
+        return build(
+                HttpStatus.CONFLICT,
+                "Conflict",
+                safeMessage(exception, "Resource already exists"),
+                request
+        );
+    }
+
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity<ApiErrorResponse> handleBadRequestException(
+            BadRequestException exception,
+            HttpServletRequest request) {
+
+        return build(
+                HttpStatus.BAD_REQUEST,
+                "Bad Request",
+                safeMessage(exception, "Bad request"),
                 request
         );
     }
@@ -106,15 +174,46 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ApiErrorResponse> handleResponseStatus(
+            ResponseStatusException exception,
+            HttpServletRequest request) {
+
+        HttpStatus status = HttpStatus.valueOf(exception.getStatusCode().value());
+        return build(
+                status,
+                status.getReasonPhrase(),
+                exception.getReason() != null ? exception.getReason() : exception.getMessage(),
+                request
+        );
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ApiErrorResponse> handleRuntimeException(
             RuntimeException exception,
             HttpServletRequest request) {
 
+        String msg = exception.getMessage();
+        if (msg != null) {
+            String lower = msg.toLowerCase();
+            if (lower.contains("already exists") || lower.contains("conflict")) {
+                return build(HttpStatus.CONFLICT, "Conflict", msg, request);
+            }
+            if (lower.contains("not found") || lower.contains("no student profile")) {
+                return build(HttpStatus.NOT_FOUND, "Not Found", msg, request);
+            }
+            if (lower.contains("required") || lower.contains("invalid") || lower.contains("must be")) {
+                return build(HttpStatus.BAD_REQUEST, "Bad Request", msg, request);
+            }
+            if (lower.contains("access denied") || lower.contains("not own")) {
+                return build(HttpStatus.FORBIDDEN, "Forbidden", msg, request);
+            }
+        }
+
         return build(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "Internal Server Error",
-                "An unexpected error occurred",
+                safeMessage(exception, "An unexpected error occurred"),
                 request
         );
     }
@@ -127,7 +226,7 @@ public class GlobalExceptionHandler {
         return build(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "Internal Server Error",
-                "An unexpected error occurred",
+                safeMessage(exception, "An unexpected error occurred"),
                 request
         );
     }

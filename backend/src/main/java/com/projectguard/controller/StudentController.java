@@ -121,9 +121,10 @@ public class StudentController {
      */
     @GetMapping("/meta/branches/{branchId}/domains")
     public ResponseEntity<List<ProjectDomainResponse>> getDomainsByBranch(
-            @PathVariable Long branchId) {
+            @PathVariable Long branchId,
+            @RequestParam(required = false) String academicLevel) {
 
-        return ResponseEntity.ok(studentService.getDomainsByBranch(branchId));
+        return ResponseEntity.ok(studentService.getDomainsByBranch(branchId, academicLevel));
     }
 
     /**

@@ -7,11 +7,16 @@ public class StudentProfileResponse {
 
     private Long id;
     private Long userId;
+    private String name;
     private String username;
+    private String email;
     private Long branchId;
     private String branchName;
+    private String academicLevel;
     private Long domainId;
     private String domainName;
+    private Long technologyId;
+    private String technologyName;
     private Integer teamSize;
     private Integer availableTimeWeeks;
     private String previousExperience;
@@ -40,12 +45,28 @@ public class StudentProfileResponse {
         this.userId = userId;
     }
 
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
     public String getUsername() {
         return username;
     }
 
     public void setUsername(String username) {
         this.username = username;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
     }
 
     public Long getBranchId() {
@@ -64,6 +85,14 @@ public class StudentProfileResponse {
         this.branchName = branchName;
     }
 
+    public String getAcademicLevel() {
+        return academicLevel;
+    }
+
+    public void setAcademicLevel(String academicLevel) {
+        this.academicLevel = academicLevel;
+    }
+
     public Long getDomainId() {
         return domainId;
     }
@@ -78,6 +107,22 @@ public class StudentProfileResponse {
 
     public void setDomainName(String domainName) {
         this.domainName = domainName;
+    }
+
+    public Long getTechnologyId() {
+        return technologyId;
+    }
+
+    public void setTechnologyId(Long technologyId) {
+        this.technologyId = technologyId;
+    }
+
+    public String getTechnologyName() {
+        return technologyName;
+    }
+
+    public void setTechnologyName(String technologyName) {
+        this.technologyName = technologyName;
     }
 
     public Integer getTeamSize() {
@@ -144,3 +189,4 @@ public class StudentProfileResponse {
         this.updatedAt = updatedAt;
     }
 }
+

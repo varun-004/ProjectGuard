@@ -36,9 +36,16 @@ public class StudentProfile {
     @JoinColumn(name = "branch_id", nullable = false)
     private EngineeringBranch branch;
 
+    @Column(name = "academic_level", length = 20)
+    private String academicLevel;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "domain_id", nullable = false)
     private ProjectDomain domain;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "technology_id", nullable = true)
+    private Technology technology;
 
     @Column(name = "team_size", nullable = false)
     private Integer teamSize;
@@ -103,12 +110,28 @@ public class StudentProfile {
         this.branch = branch;
     }
 
+    public String getAcademicLevel() {
+        return academicLevel;
+    }
+
+    public void setAcademicLevel(String academicLevel) {
+        this.academicLevel = academicLevel;
+    }
+
     public ProjectDomain getDomain() {
         return domain;
     }
 
     public void setDomain(ProjectDomain domain) {
         this.domain = domain;
+    }
+
+    public Technology getTechnology() {
+        return technology;
+    }
+
+    public void setTechnology(Technology technology) {
+        this.technology = technology;
     }
 
     public Integer getTeamSize() {

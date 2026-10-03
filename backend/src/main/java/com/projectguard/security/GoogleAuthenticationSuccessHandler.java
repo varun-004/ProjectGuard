@@ -68,6 +68,7 @@ public class GoogleAuthenticationSuccessHandler
                 user = new User();
 
                 user.setUsername(createUniqueUsername(name, email));
+                user.setName(name != null && !name.isBlank() ? name : email);
                 user.setEmail(email);
                 user.setPassword(null);
                 user.setRole(Role.STUDENT);
@@ -78,9 +79,23 @@ public class GoogleAuthenticationSuccessHandler
 
                 user.setAuthProvider(AuthProvider.GOOGLE);
                 user.setProviderId(googleId);
+                // Update name if it was null or empty
+                if (user.getName() == null || user.getName().isBlank()) {
+                    user.setName(name != null && !name.isBlank() ? name : email);
+                }
             }
 
             user = userRepository.save(user);
+        }
+
+        // Backfill name for ANY Google user whose name is still null/blank
+        // (covers existing users who logged in before this fix was applied)
+        if (user.getName() == null || user.getName().isBlank()) {
+            String resolvedName = (name != null && !name.isBlank()) ? name : email;
+            if (resolvedName != null && !resolvedName.isBlank()) {
+                user.setName(resolvedName);
+                user = userRepository.save(user);
+            }
         }
 
         String token = jwtService.generateToken(
@@ -88,7 +103,7 @@ public class GoogleAuthenticationSuccessHandler
                 user.getRole().name()
         );
 
-        String frontendRedirectUrl = "http://localhost:5173/oauth2/redirect" +
+        String frontendRedirectUrl =  "http://localhost:54827/oauth2/redirect" +
                 "?token=" + token +
                 "&username=" + user.getUsername() +
                 "&role=" + user.getRole().name();

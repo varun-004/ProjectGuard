@@ -6,6 +6,8 @@ import com.projectguard.dto.auth.RegisterRequest;
 import com.projectguard.entity.User;
 import com.projectguard.entity.enums.AuthProvider;
 import com.projectguard.entity.enums.Role;
+import com.projectguard.exception.DuplicateResourceException;
+import com.projectguard.exception.ResourceNotFoundException;
 import com.projectguard.repository.UserRepository;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -34,17 +36,18 @@ public class AuthService {
     public AuthResponse register(RegisterRequest request) {
 
         if (userRepository.existsByUsername(request.getUsername())) {
-            throw new RuntimeException("Username already exists");
+            throw new DuplicateResourceException("Username already exists");
         }
 
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email already exists");
+            throw new DuplicateResourceException("Email already exists");
         }
 
         User user = new User();
 
-        user.setUsername(request.getUsername());
-        user.setEmail(request.getEmail());
+        user.setUsername(request.getUsername().trim());
+        user.setEmail(request.getEmail().trim());
+        user.setName(request.getUsername().trim());
         user.setPassword(
                 passwordService.encode(request.getPassword())
         );
@@ -77,7 +80,7 @@ public class AuthService {
         User user = userRepository
                 .findByUsername(request.getUsername())
                 .orElseThrow(() ->
-                        new RuntimeException("User not found"));
+                        new ResourceNotFoundException("User not found"));
 
         String token = jwtService.generateToken(
                 user.getUsername(),
