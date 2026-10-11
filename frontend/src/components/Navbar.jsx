@@ -19,6 +19,7 @@ const Navbar = () => {
         { to: '/dashboard', label: 'Dashboard', icon: '⊞' },
         { to: '/profile',   label: 'My Profile', icon: '◎' },
         { to: '/assessments', label: 'Assessments', icon: '✦' },
+        { to: '/recommendations', label: 'Recommendations', icon: '✨' },
     ];
 
     return (

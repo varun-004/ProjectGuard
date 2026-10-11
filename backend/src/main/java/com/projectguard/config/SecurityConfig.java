@@ -162,6 +162,10 @@ public class SecurityConfig {
                                 "/api/students/**"
                         ).hasRole("STUDENT")
 
+                        .requestMatchers(
+                                "/api/recommendations/**"
+                        ).hasAnyRole("STUDENT", "ADMIN")
+
                         // Everything else requires authentication
                         .anyRequest().authenticated()
                 )

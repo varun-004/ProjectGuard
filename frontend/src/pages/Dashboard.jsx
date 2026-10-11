@@ -152,13 +152,11 @@ const Dashboard = () => {
                             {hasProfile === false ? 'Create Profile' : 'My Profile'}
                         </Link>
                         <Link
-                            to="/assessments"
-                            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold bg-white/15 text-white border border-white/30 rounded-xl hover:bg-white/25 transition-colors"
+                            to="/recommendations"
+                            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold bg-white/20 text-white border border-white/30 rounded-xl hover:bg-white/30 transition-colors"
                         >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                            </svg>
-                            Assessments
+                            <span>✨</span>
+                            Recommendations
                         </Link>
                     </div>
                 </div>
@@ -377,6 +375,13 @@ const Dashboard = () => {
                             title: 'Take Assessment',
                             desc: 'Evaluate your proficiency across technology stacks.',
                             color: 'violet',
+                        },
+                        {
+                            to: '/recommendations',
+                            icon: '✨',
+                            title: 'Project Recommendations',
+                            desc: 'Discover vetted real-world capstones ranked by your skill fit.',
+                            color: 'indigo',
                         },
                         {
                             to: '/assessments',
