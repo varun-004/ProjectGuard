@@ -50,6 +50,11 @@ public class ProjectRecommendationResponse {
     private Boolean qualityApproved;
     private String qualityEvaluation;
 
+    private Double suitabilityScore;
+    private Double feasibilityScore;
+    private Boolean isFreshAlternative = false;
+    private Boolean isGeneratedIdea = false;
+
     public ProjectRecommendationResponse() {}
 
     public Long getRecommendationId() { return recommendationId; }
@@ -62,7 +67,10 @@ public class ProjectRecommendationResponse {
     public void setRankOrder(Integer rankOrder) { this.rankOrder = rankOrder; }
 
     public Double getMatchScore() { return matchScore; }
-    public void setMatchScore(Double matchScore) { this.matchScore = matchScore; }
+    public void setMatchScore(Double matchScore) {
+        this.matchScore = matchScore;
+        this.suitabilityScore = matchScore;
+    }
 
     public Double getQualityScore() { return qualityScore; }
     public void setQualityScore(Double qualityScore) { this.qualityScore = qualityScore; }
@@ -171,4 +179,16 @@ public class ProjectRecommendationResponse {
 
     public String getQualityEvaluation() { return qualityEvaluation; }
     public void setQualityEvaluation(String qualityEvaluation) { this.qualityEvaluation = qualityEvaluation; }
+
+    public Double getSuitabilityScore() { return suitabilityScore; }
+    public void setSuitabilityScore(Double suitabilityScore) { this.suitabilityScore = suitabilityScore; }
+
+    public Double getFeasibilityScore() { return feasibilityScore; }
+    public void setFeasibilityScore(Double feasibilityScore) { this.feasibilityScore = feasibilityScore; }
+
+    public Boolean getIsFreshAlternative() { return isFreshAlternative; }
+    public void setIsFreshAlternative(Boolean isFreshAlternative) { this.isFreshAlternative = isFreshAlternative; }
+
+    public Boolean getIsGeneratedIdea() { return isGeneratedIdea; }
+    public void setIsGeneratedIdea(Boolean isGeneratedIdea) { this.isGeneratedIdea = isGeneratedIdea; }
 }

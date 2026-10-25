@@ -28,27 +28,61 @@ public class RecommendationEngineService {
     private final ProjectRepository projectRepository;
     private final AssessmentResultRepository assessmentResultRepository;
     private final ProjectQualityGateService qualityGateService;
+    private final ProjectIdeaGeneratorService ideaGeneratorService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public RecommendationEngineService(ProjectRepository projectRepository,
+                                       AssessmentResultRepository assessmentResultRepository,
+                                       ProjectQualityGateService qualityGateService,
+                                       ProjectIdeaGeneratorService ideaGeneratorService) {
+        this.projectRepository = projectRepository;
+        this.assessmentResultRepository = assessmentResultRepository;
+        this.qualityGateService = qualityGateService;
+        this.ideaGeneratorService = ideaGeneratorService;
+    }
 
     public RecommendationEngineService(ProjectRepository projectRepository,
                                        AssessmentResultRepository assessmentResultRepository,
                                        ProjectQualityGateService qualityGateService) {
-        this.projectRepository = projectRepository;
-        this.assessmentResultRepository = assessmentResultRepository;
-        this.qualityGateService = qualityGateService;
+        this(projectRepository, assessmentResultRepository, qualityGateService, null);
     }
 
     /**
-     * Computes ranked recommendations for a student profile using rule-based scoring.
+     * Computes ranked recommendations for a student profile using rule-based scoring across all 4 inputs.
      */
     public List<ProjectRecommendationResponse> generateRecommendations(StudentProfile studentProfile) {
+        return generateRecommendations(studentProfile, Collections.emptySet());
+    }
+
+    /**
+     * Computes fresh personalized recommendations preferring unseen alternatives and generating new project ideas when needed.
+     */
+    public List<ProjectRecommendationResponse> generateRecommendations(StudentProfile studentProfile, Set<Long> previouslyRecommendedIds) {
         if (studentProfile == null) {
             return Collections.emptyList();
         }
 
-        // 1. Fetch catalog projects with eager branch, skills, domain
+        // 1. Fetch catalog projects
         List<Project> catalog = projectRepository.findAllApprovedCatalogProjectsWithDetails();
-        if (catalog.isEmpty()) {
+        if (catalog == null || catalog.isEmpty()) {
             catalog = projectRepository.findByIsCatalogTrue();
+        }
+
+        // Include any approved student-specific projects
+        if (studentProfile.getId() != null) {
+            try {
+                List<Project> studentProjects = projectRepository.findByStudentProfileId(studentProfile.getId());
+                if (studentProjects != null && !studentProjects.isEmpty()) {
+                    List<Project> merged = new ArrayList<>(catalog != null ? catalog : Collections.emptyList());
+                    for (Project sp : studentProjects) {
+                        if (sp.getQualityApproved() != null && sp.getQualityApproved()) {
+                            merged.add(sp);
+                        }
+                    }
+                    catalog = merged;
+                }
+            } catch (Exception ignored) {
+            }
         }
 
         // 2. Fetch student's Phase 5 assessment results
@@ -77,89 +111,162 @@ public class RecommendationEngineService {
             }
         }
 
-        List<ProjectRecommendationResponse> scoredList = new ArrayList<>();
+        List<ProjectRecommendationResponse> unseenScored = new ArrayList<>();
+        List<ProjectRecommendationResponse> previouslySeenScored = new ArrayList<>();
 
-        for (Project project : catalog) {
-            // Quality Gate check
-            if (project.getQualityApproved() == null || !project.getQualityApproved()) {
-                continue;
-            }
-
-            // Hard filter: Branch compatibility
-            if (!isBranchCompatible(studentProfile.getBranch(), project)) {
-                continue;
-            }
-
-            // Calculate fit scores
-            double domainScore = computeDomainFit(studentProfile, project);
-            double techScore = computeTechnologyFit(studentProfile, project);
-            List<AssessedSkillMatchDto> skillMatches = new ArrayList<>();
-            List<String> identifiedGaps = new ArrayList<>();
-            List<String> reasons = new ArrayList<>();
-
-            double skillScore = computeSkillFit(project, latestSkillAssessments, declaredSkills, skillMatches, identifiedGaps, reasons);
-            double profScore = computeProficiencyFit(project, latestSkillAssessments, skillMatches, reasons, identifiedGaps);
-            double expScore = computeExperienceAndInterestsFit(studentProfile, project, reasons);
-            double teamScore = computeTeamFit(studentProfile, project, reasons, identifiedGaps);
-            double timeScore = computeTimeFit(studentProfile, project, reasons, identifiedGaps);
-            double constraintsScore = teamScore + timeScore;
-            double penaltyScore = computePenalties(studentProfile, project, latestSkillAssessments, identifiedGaps);
-
-            double totalScore = domainScore + techScore + skillScore + profScore + expScore + constraintsScore - penaltyScore;
-            totalScore = Math.max(0.0, Math.min(100.0, Math.round(totalScore * 10.0) / 10.0));
-
-            // Domain match reason
-            if (domainScore >= 20.0) {
-                reasons.add(0, "Exact match with your chosen domain: " + project.getDomain().getName());
-            } else if (domainScore > 0) {
-                reasons.add(0, "Adjacent domain relevant to your engineering branch curriculum: " +
-                        (project.getDomain() != null ? project.getDomain().getName() : "General"));
-            }
-
-            // Tech match reason
-            if (studentProfile.getTechnology() != null && techScore >= 18.0) {
-                reasons.add("Directly utilizes your selected primary technology stack: " + studentProfile.getTechnology().getName());
-            }
-
-            // Build explanation
-            String explanation = String.format(
-                    "Match Score: %.1f%% (Domain Fit: %.1f/25, Technology: %.1f/20, Skills Compatibility: %.1f/25, " +
-                    "Assessed Mastery: %.1f/15, Experience/Interests: %.1f/5, Constraints: %.1f/10, Penalties: -%.1f). " +
-                    "Evaluated independently from project quality score (%.1f/100).",
-                    totalScore, domainScore, techScore, skillScore, profScore, expScore, constraintsScore, penaltyScore,
-                    project.getQualityScore() != null ? project.getQualityScore() : 85.0
-            );
-
-            ScoreBreakdownDto breakdown = new ScoreBreakdownDto(
-                    round1(domainScore), round1(techScore), round1(skillScore),
-                    round1(profScore), round1(expScore), round1(teamScore),
-                    round1(timeScore), round1(penaltyScore), round1(totalScore)
-            );
-
-            if (totalScore >= MIN_MATCH_THRESHOLD) {
-                ProjectRecommendationResponse resp = mapToResponse(project, totalScore, breakdown, explanation,
-                        reasons, identifiedGaps, skillMatches);
-                scoredList.add(resp);
+        if (catalog != null) {
+            for (Project project : catalog) {
+                ProjectRecommendationResponse resp = scoreProject(project, studentProfile, latestSkillAssessments, declaredSkills);
+                if (resp != null) {
+                    if (previouslyRecommendedIds != null && previouslyRecommendedIds.contains(project.getId())) {
+                        resp.setIsFreshAlternative(false);
+                        previouslySeenScored.add(resp);
+                    } else {
+                        resp.setIsFreshAlternative(true);
+                        unseenScored.add(resp);
+                    }
+                }
             }
         }
 
-        // Rank by matchScore descending, then by qualityScore descending
-        scoredList.sort((a, b) -> {
+        int catalogEligibleCount = unseenScored.size() + previouslySeenScored.size();
+
+        // 3. When suitable unseen alternatives are insufficient, generate new project ideas
+        // Only generate if student has realistic time feasibility (>= 6 weeks)
+        boolean hasFeasibleTime = studentProfile.getAvailableTimeWeeks() == null || studentProfile.getAvailableTimeWeeks() >= 6;
+        if (unseenScored.size() < 3 && ideaGeneratorService != null && studentProfile.getId() != null && hasFeasibleTime) {
+            int neededCount = Math.max(2, 4 - unseenScored.size());
+            List<Project> generatedProjects = ideaGeneratorService.generateInnovativeProjects(studentProfile, neededCount);
+            for (Project genProject : generatedProjects) {
+                ProjectRecommendationResponse resp = scoreProject(genProject, studentProfile, latestSkillAssessments, declaredSkills);
+                if (resp != null) {
+                    resp.setIsFreshAlternative(true);
+                    resp.setIsGeneratedIdea(true);
+                    unseenScored.add(resp);
+                }
+            }
+        }
+
+        // Sort both pools by matchScore desc, then by qualityScore desc
+        Comparator<ProjectRecommendationResponse> comparator = (a, b) -> {
             int cmp = Double.compare(b.getMatchScore(), a.getMatchScore());
             if (cmp != 0) return cmp;
             return Double.compare(
                     b.getQualityScore() != null ? b.getQualityScore() : 0.0,
                     a.getQualityScore() != null ? a.getQualityScore() : 0.0
             );
-        });
+        };
+
+        unseenScored.sort(comparator);
+        previouslySeenScored.sort(comparator);
+
+        // Fresh unseen alternatives appear first; backfill previously seen up to target capacity
+        List<ProjectRecommendationResponse> combined = new ArrayList<>(unseenScored);
+        int targetCapacity = Math.max(catalogEligibleCount, unseenScored.size());
+        for (ProjectRecommendationResponse seen : previouslySeenScored) {
+            if (combined.size() >= targetCapacity) {
+                break;
+            }
+            if (combined.stream().noneMatch(c -> c.getProjectId().equals(seen.getProjectId()))) {
+                combined.add(seen);
+            }
+        }
 
         // Assign rank order
         int rank = 1;
-        for (ProjectRecommendationResponse resp : scoredList) {
+        for (ProjectRecommendationResponse resp : combined) {
             resp.setRankOrder(rank++);
         }
 
-        return scoredList;
+        return combined;
+    }
+
+    /**
+     * Evaluates a project candidate against the student's 4 inputs:
+     * 1. Engineering branch
+     * 2. Technologies
+     * 3. Skills and proficiency
+     * 4. Assessment/quiz scores
+     */
+    public ProjectRecommendationResponse scoreProject(Project project,
+                                                       StudentProfile studentProfile,
+                                                       Map<Long, AssessmentResult> latestSkillAssessments,
+                                                       Map<Long, StudentSkill> declaredSkills) {
+        // Quality Gate check
+        if (project.getQualityApproved() == null || !project.getQualityApproved()) {
+            return null;
+        }
+
+        // Hard filter: Branch compatibility (Input 1)
+        if (!isBranchCompatible(studentProfile.getBranch(), project)) {
+            return null;
+        }
+
+        // Calculate fit scores across all 4 inputs
+        double domainScore = computeDomainFit(studentProfile, project);
+        double techScore = computeTechnologyFit(studentProfile, project); // Input 2
+        List<AssessedSkillMatchDto> skillMatches = new ArrayList<>();
+        List<String> identifiedGaps = new ArrayList<>();
+        List<String> reasons = new ArrayList<>();
+
+        double skillScore = computeSkillFit(project, latestSkillAssessments, declaredSkills, skillMatches, identifiedGaps, reasons); // Input 3 & 4
+        double profScore = computeProficiencyFit(project, latestSkillAssessments, declaredSkills, skillMatches, reasons, identifiedGaps); // Input 3 & 4
+        double expScore = computeExperienceAndInterestsFit(studentProfile, project, reasons);
+        double teamScore = computeTeamFit(studentProfile, project, reasons, identifiedGaps);
+        double timeScore = computeTimeFit(studentProfile, project, reasons, identifiedGaps);
+        double constraintsScore = teamScore + timeScore;
+        double penaltyScore = computePenalties(studentProfile, project, latestSkillAssessments, identifiedGaps);
+
+        double totalScore = domainScore + techScore + skillScore + profScore + expScore + constraintsScore - penaltyScore;
+        totalScore = Math.max(0.0, Math.min(100.0, Math.round(totalScore * 10.0) / 10.0));
+
+        if (totalScore < MIN_MATCH_THRESHOLD) {
+            return null;
+        }
+
+        // Domain match reason
+        if (domainScore >= 20.0) {
+            reasons.add(0, "Exact match with your chosen domain: " + project.getDomain().getName());
+        } else if (domainScore > 0) {
+            reasons.add(0, "Adjacent domain relevant to your engineering branch curriculum: " +
+                    (project.getDomain() != null ? project.getDomain().getName() : "General"));
+        }
+
+        // Tech match reason (Input 2)
+        if (studentProfile.getTechnology() != null && techScore >= 18.0) {
+            reasons.add("Directly utilizes your selected primary technology stack: " + studentProfile.getTechnology().getName());
+        }
+
+        // Build explanation
+        String explanation = String.format(
+                "Match Score: %.1f%% (Domain Fit: %.1f/25, Technology: %.1f/20, Skills Compatibility: %.1f/25, " +
+                "Assessed Mastery: %.1f/15, Experience/Interests: %.1f/5, Constraints: %.1f/10, Penalties: -%.1f). " +
+                "Evaluated independently from project quality score (%.1f/100).",
+                totalScore, domainScore, techScore, skillScore, profScore, expScore, constraintsScore, penaltyScore,
+                project.getQualityScore() != null ? project.getQualityScore() : 85.0
+        );
+
+        ScoreBreakdownDto breakdown = new ScoreBreakdownDto(
+                round1(domainScore), round1(techScore), round1(skillScore),
+                round1(profScore), round1(expScore), round1(teamScore),
+                round1(timeScore), round1(penaltyScore), round1(totalScore)
+        );
+
+        ProjectRecommendationResponse resp = mapToResponse(project, totalScore, breakdown, explanation,
+                reasons, identifiedGaps, skillMatches);
+
+        resp.setSuitabilityScore(totalScore);
+        double feasScore = Math.min(100.0, Math.max(0.0,
+                ((teamScore + timeScore) / 10.0 * 60.0) +
+                (project.getQualityScore() != null ? project.getQualityScore() : 85.0) * 0.4 -
+                penaltyScore * 0.5));
+        resp.setFeasibilityScore(round1(feasScore));
+
+        if (project.getIsCatalog() != null && !project.getIsCatalog()) {
+            resp.setIsGeneratedIdea(true);
+        }
+
+        return resp;
     }
 
     private boolean isBranchCompatible(EngineeringBranch studentBranch, Project project) {
@@ -257,17 +364,28 @@ public class RecommendationEngineService {
                     reasons.add("High assessed proficiency in required skill: " + s.getName() + " (" + round1(ar.getPercentage()) + "%)");
                 }
             } else if (ss != null) {
-                // Declared but not assessed in Phase 5
-                matchedPoints += 0.45;
+                // Declared in profile with proficiency level
+                double declaredFraction = switch (ss.getProficiencyLevel() != null ? ss.getProficiencyLevel() : ProficiencyLevel.BEGINNER) {
+                    case EXPERT -> 0.85;
+                    case ADVANCED -> 0.70;
+                    case INTERMEDIATE -> 0.55;
+                    case BEGINNER -> 0.40;
+                };
+                if (ss.getYearsOfExperience() != null && ss.getYearsOfExperience() > 0) {
+                    declaredFraction = Math.min(0.95, declaredFraction + Math.min(0.08, ss.getYearsOfExperience() * 0.02));
+                }
+                matchedPoints += declaredFraction;
                 skillMatches.add(new AssessedSkillMatchDto(
                         s.getName(),
                         ss.getProficiencyLevel() != null ? ss.getProficiencyLevel().name() : "BEGINNER",
                         0.0,
                         false,
                         false,
-                        "Self-declared in profile; Phase 5 assessment pending"
+                        "Self-declared in profile (" + (ss.getProficiencyLevel() != null ? ss.getProficiencyLevel().name() : "BEGINNER") + "); Phase 5 assessment pending"
                 ));
-                identifiedGaps.add("Required skill '" + s.getName() + "' is declared but not yet verified via Phase 5 assessment");
+                identifiedGaps.add("Required skill '" + s.getName() + "' is declared (" +
+                        (ss.getProficiencyLevel() != null ? ss.getProficiencyLevel().name() : "BEGINNER") +
+                        ") but not yet verified via Phase 5 assessment");
             } else {
                 // Missing skill
                 skillMatches.add(new AssessedSkillMatchDto(
@@ -292,6 +410,7 @@ public class RecommendationEngineService {
 
     private double computeProficiencyFit(Project project,
                                          Map<Long, AssessmentResult> latestSkillAssessments,
+                                         Map<Long, StudentSkill> declaredSkills,
                                          List<AssessedSkillMatchDto> skillMatches,
                                          List<String> reasons,
                                          List<String> identifiedGaps) {
@@ -307,16 +426,40 @@ public class RecommendationEngineService {
 
         for (Skill s : required) {
             AssessmentResult ar = latestSkillAssessments.get(s.getId());
+            StudentSkill ss = declaredSkills != null ? declaredSkills.get(s.getId()) : null;
+
             if (ar != null) {
                 count++;
                 ProficiencyLevel lvl = ar.getLevel();
+                double assessWeight;
                 if (lvl == ProficiencyLevel.ADVANCED) {
-                    sumWeights += 1.0;
+                    assessWeight = 1.0;
                 } else if (lvl == ProficiencyLevel.INTERMEDIATE) {
-                    sumWeights += (complexity.equals("ADVANCED")) ? 0.70 : 0.90;
+                    assessWeight = (complexity.equals("ADVANCED")) ? 0.70 : 0.90;
                 } else {
-                    sumWeights += (complexity.equals("ADVANCED")) ? 0.35 : 0.60;
+                    assessWeight = (complexity.equals("ADVANCED")) ? 0.35 : 0.60;
                 }
+
+                if (ss != null) {
+                    double declWeight = switch (ss.getProficiencyLevel() != null ? ss.getProficiencyLevel() : ProficiencyLevel.BEGINNER) {
+                        case EXPERT -> 1.0;
+                        case ADVANCED -> 0.85;
+                        case INTERMEDIATE -> (complexity.equals("ADVANCED")) ? 0.65 : 0.80;
+                        case BEGINNER -> (complexity.equals("ADVANCED")) ? 0.30 : 0.50;
+                    };
+                    sumWeights += (assessWeight * 0.75 + declWeight * 0.25);
+                } else {
+                    sumWeights += assessWeight;
+                }
+            } else if (ss != null) {
+                count++;
+                double declWeight = switch (ss.getProficiencyLevel() != null ? ss.getProficiencyLevel() : ProficiencyLevel.BEGINNER) {
+                    case EXPERT -> 0.95;
+                    case ADVANCED -> 0.80;
+                    case INTERMEDIATE -> (complexity.equals("ADVANCED")) ? 0.60 : 0.75;
+                    case BEGINNER -> (complexity.equals("ADVANCED")) ? 0.30 : 0.50;
+                };
+                sumWeights += declWeight;
             }
         }
 

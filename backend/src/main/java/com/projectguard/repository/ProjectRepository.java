@@ -31,6 +31,13 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
 
     @Query("SELECT DISTINCT p FROM Project p " +
            "LEFT JOIN FETCH p.domain " +
+           "WHERE (p.isCatalog = true OR p.studentProfile.id = :profileId) AND p.qualityApproved = true")
+    List<Project> findAllApprovedProjectsForStudentWithDetails(@Param("profileId") Long profileId);
+
+    boolean existsByTitle(String title);
+
+    @Query("SELECT DISTINCT p FROM Project p " +
+           "LEFT JOIN FETCH p.domain " +
            "WHERE p.id = :id AND p.isCatalog = true")
     Optional<Project> findCatalogProjectWithAllDetailsById(@Param("id") Long id);
 }

@@ -9,6 +9,7 @@ import com.projectguard.exception.ResourceNotFoundException;
 import com.projectguard.repository.ProjectRepository;
 import com.projectguard.repository.StudentProfileRepository;
 import com.projectguard.repository.StudentProjectRecommendationRepository;
+import com.projectguard.repository.StudentRecommendationHistoryRepository;
 import com.projectguard.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,24 +23,30 @@ public class RecommendationService {
 
     private final RecommendationEngineService recommendationEngine;
     private final StudentProjectRecommendationRepository recommendationRepository;
+    private final StudentRecommendationHistoryRepository historyRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final UserRepository userRepository;
     private final ProjectRepository projectRepository;
+    private final ProjectIdeaGeneratorService ideaGeneratorService;
 
     public RecommendationService(RecommendationEngineService recommendationEngine,
                                  StudentProjectRecommendationRepository recommendationRepository,
+                                 StudentRecommendationHistoryRepository historyRepository,
                                  StudentProfileRepository studentProfileRepository,
                                  UserRepository userRepository,
-                                 ProjectRepository projectRepository) {
+                                 ProjectRepository projectRepository,
+                                 ProjectIdeaGeneratorService ideaGeneratorService) {
         this.recommendationEngine = recommendationEngine;
         this.recommendationRepository = recommendationRepository;
+        this.historyRepository = historyRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.userRepository = userRepository;
         this.projectRepository = projectRepository;
+        this.ideaGeneratorService = ideaGeneratorService;
     }
 
     /**
-     * Get or calculate recommendations for the authenticated user.
+     * Get or calculate fresh recommendations for the authenticated user.
      */
     @Transactional
     public RecommendationListResponse getRecommendationsForUser(String usernameOrEmail, boolean forceRefresh) {
@@ -64,8 +71,11 @@ public class RecommendationService {
                 resultResponses.add(mapPersistedToDto(rec, p));
             }
         } else {
-            // Calculate fresh recommendations
-            resultResponses = recommendationEngine.generateRecommendations(profile);
+            // Retrieve history of previously recommended project IDs to avoid duplicate recommendations
+            Set<Long> previouslyRecommendedIds = historyRepository.findRecommendedProjectIdsByStudentProfileId(profile.getId());
+
+            // Calculate fresh recommendations preferring relevant alternatives and generating new ideas when insufficient
+            resultResponses = recommendationEngine.generateRecommendations(profile, previouslyRecommendedIds);
 
             // Persist into database idempotently
             recommendationRepository.deleteByStudentProfileId(profile.getId());
@@ -98,6 +108,9 @@ public class RecommendationService {
 
                     StudentProjectRecommendation saved = recommendationRepository.save(rec);
                     dto.setRecommendationId(saved.getId());
+
+                    // Record recommendation in user history for future freshness tracking
+                    historyRepository.save(new StudentRecommendationHistory(profile, p, dto.getMatchScore(), dto.getRankOrder()));
                 }
             }
         }
@@ -116,6 +129,9 @@ public class RecommendationService {
         response.setRecommendations(resultResponses);
         response.setEvaluatedAt(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         response.setDisclaimer("Match percentage measures candidate-project compatibility and skill readiness, not guaranteed project success. Project Quality is evaluated separately based on real-world engineering standards.");
+        if (ideaGeneratorService != null) {
+            response.setAiConfigurationStatus(ideaGeneratorService.getAiConfigurationStatus());
+        }
 
         if (resultResponses.isEmpty()) {
             response.setMessage("No matching projects found that satisfy your branch, academic level, and time constraints. " +
@@ -230,6 +246,18 @@ public class RecommendationService {
         dto.setPrerequisites(p.getPrerequisites());
         dto.setQualityApproved(p.getQualityApproved());
         dto.setQualityEvaluation(p.getQualityEvaluation());
+
+        dto.setSuitabilityScore(rec.getMatchScore());
+        double teamFit = rec.getTeamFitScore() != null ? rec.getTeamFitScore() : 2.5;
+        double timeFit = rec.getTimeFitScore() != null ? rec.getTimeFitScore() : 2.5;
+        double penalty = rec.getPenaltyScore() != null ? rec.getPenaltyScore() : 0.0;
+        double qual = p.getQualityScore() != null ? p.getQualityScore() : 85.0;
+        double feas = Math.min(100.0, Math.max(0.0, ((teamFit + timeFit) / 10.0 * 60.0) + (qual * 0.4) - (penalty * 0.5)));
+        dto.setFeasibilityScore(Math.round(feas * 10.0) / 10.0);
+
+        if (p.getIsCatalog() != null && !p.getIsCatalog()) {
+            dto.setIsGeneratedIdea(true);
+        }
 
         return dto;
     }

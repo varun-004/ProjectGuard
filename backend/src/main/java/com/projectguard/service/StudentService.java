@@ -15,7 +15,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -176,10 +178,12 @@ public class StudentService {
     public StudentProfileResponse createProfile(String username, StudentProfileRequest request) {
 
         User user = userRepository.findByUsername(username)
+                .or(() -> userRepository.findByEmail(username))
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
 
         if (studentProfileRepository.existsByUserId(user.getId())) {
-            throw new DuplicateResourceException("Student profile already exists for this user");
+            StudentProfile existing = studentProfileRepository.findByUserId(user.getId()).orElseThrow();
+            return updateProfile(existing.getId(), username, request);
         }
 
         if (request.getName() != null && !request.getName().trim().isEmpty()) {
@@ -239,6 +243,7 @@ public class StudentService {
     @Transactional(readOnly = true)
     public StudentProfileResponse getProfile(Long id) {
         StudentProfile profile = studentProfileRepository.findById(id)
+                .or(() -> studentProfileRepository.findByUserId(id))
                 .orElseThrow(() -> new ResourceNotFoundException("Student profile not found with ID: " + id));
         return mapToResponse(profile);
     }
@@ -246,6 +251,7 @@ public class StudentService {
     @Transactional
     public StudentProfileResponse getProfileByUsername(String username) {
         User user = userRepository.findByUsername(username)
+                .or(() -> userRepository.findByEmail(username))
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
 
         StudentProfile profile = studentProfileRepository.findByUserId(user.getId())
@@ -261,7 +267,9 @@ public class StudentService {
 
     @Transactional(readOnly = true)
     public boolean hasProfile(String username) {
-        User user = userRepository.findByUsername(username).orElse(null);
+        User user = userRepository.findByUsername(username)
+                .or(() -> userRepository.findByEmail(username))
+                .orElse(null);
         if (user == null) return false;
         return studentProfileRepository.existsByUserId(user.getId());
     }
@@ -376,12 +384,23 @@ public class StudentService {
     public StudentProfileResponse addSkills(Long id, String username, StudentSkillsRequest request) {
 
         StudentProfile profile = studentProfileRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Student profile not found with ID: " + id));
+                .or(() -> studentProfileRepository.findByUserId(id))
+                .orElseThrow(() -> new ResourceNotFoundException("Student profile not found with ID: " + id));
 
         assertOwner(profile, username);
 
+        if (request == null || request.getSkills() == null || request.getSkills().isEmpty()) {
+            return mapToResponse(profile);
+        }
+
+        Set<Long> processedSkillIds = new HashSet<>();
         for (StudentSkillRequest skillReq : request.getSkills()) {
+            if (skillReq == null) continue;
             Skill skill = resolveSkill(skillReq);
+
+            if (!processedSkillIds.add(skill.getId())) {
+                continue;
+            }
 
             boolean alreadyExists = studentSkillRepository
                     .existsByStudentProfileIdAndSkillId(profile.getId(), skill.getId());
@@ -389,30 +408,43 @@ public class StudentService {
             if (!alreadyExists) {
                 StudentSkill studentSkill = buildStudentSkill(profile, skill, skillReq);
                 studentSkillRepository.save(studentSkill);
+                profile.getStudentSkills().add(studentSkill);
             }
         }
+        studentSkillRepository.flush();
 
-        StudentProfile updated = studentProfileRepository.findById(id).orElseThrow();
+        StudentProfile updated = studentProfileRepository.findById(profile.getId()).orElseThrow();
         return mapToResponse(updated);
     }
 
     public StudentProfileResponse replaceSkills(Long id, String username, StudentSkillsRequest request) {
 
         StudentProfile profile = studentProfileRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Student profile not found with ID: " + id));
+                .or(() -> studentProfileRepository.findByUserId(id))
+                .orElseThrow(() -> new ResourceNotFoundException("Student profile not found with ID: " + id));
 
         assertOwner(profile, username);
 
         List<StudentSkill> existing = studentSkillRepository.findByStudentProfileId(profile.getId());
         studentSkillRepository.deleteAll(existing);
+        studentSkillRepository.flush();
+        profile.getStudentSkills().clear();
 
-        for (StudentSkillRequest skillReq : request.getSkills()) {
-            Skill skill = resolveSkill(skillReq);
-            StudentSkill studentSkill = buildStudentSkill(profile, skill, skillReq);
-            studentSkillRepository.save(studentSkill);
+        if (request != null && request.getSkills() != null) {
+            Set<Long> processedSkillIds = new HashSet<>();
+            for (StudentSkillRequest skillReq : request.getSkills()) {
+                if (skillReq == null) continue;
+                Skill skill = resolveSkill(skillReq);
+                if (processedSkillIds.add(skill.getId())) {
+                    StudentSkill studentSkill = buildStudentSkill(profile, skill, skillReq);
+                    studentSkillRepository.save(studentSkill);
+                    profile.getStudentSkills().add(studentSkill);
+                }
+            }
+            studentSkillRepository.flush();
         }
 
-        StudentProfile updated = studentProfileRepository.findById(id).orElseThrow();
+        StudentProfile updated = studentProfileRepository.findById(profile.getId()).orElseThrow();
         return mapToResponse(updated);
     }
 
@@ -560,7 +592,13 @@ public class StudentService {
     // ─── Private helpers ──────────────────────────────────────────────────────
 
     private void assertOwner(StudentProfile profile, String username) {
-        if (!profile.getUser().getUsername().equals(username)) {
+        if (username == null) {
+            throw new AccessDeniedException("Access denied: unauthenticated");
+        }
+        User user = profile.getUser();
+        boolean matches = username.equalsIgnoreCase(user.getUsername()) ||
+                (user.getEmail() != null && username.equalsIgnoreCase(user.getEmail()));
+        if (!matches) {
             throw new AccessDeniedException("Access denied: you do not own this profile");
         }
     }
@@ -584,19 +622,23 @@ public class StudentService {
     }
 
     private StudentSkill buildStudentSkill(StudentProfile profile, Skill skill, StudentSkillRequest req) {
-        ProficiencyLevel level;
-        try {
-            level = ProficiencyLevel.valueOf(req.getProficiencyLevel().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invalid proficiency level: " + req.getProficiencyLevel()
-                    + ". Valid values: BEGINNER, INTERMEDIATE, ADVANCED, EXPERT");
+        ProficiencyLevel level = ProficiencyLevel.BEGINNER;
+        if (req.getProficiencyLevel() != null && !req.getProficiencyLevel().isBlank()) {
+            try {
+                level = ProficiencyLevel.valueOf(req.getProficiencyLevel().trim().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Invalid proficiency level: " + req.getProficiencyLevel()
+                        + ". Valid values: BEGINNER, INTERMEDIATE, ADVANCED, EXPERT");
+            }
         }
+
+        Double experience = req.getYearsOfExperience() != null ? req.getYearsOfExperience() : 0.0;
 
         StudentSkill studentSkill = new StudentSkill();
         studentSkill.setStudentProfile(profile);
         studentSkill.setSkill(skill);
         studentSkill.setProficiencyLevel(level);
-        studentSkill.setYearsOfExperience(req.getYearsOfExperience());
+        studentSkill.setYearsOfExperience(experience);
         return studentSkill;
     }
 

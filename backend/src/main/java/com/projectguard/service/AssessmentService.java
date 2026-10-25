@@ -4,6 +4,7 @@ import com.projectguard.dto.assessment.*;
 import com.projectguard.dto.student.SkillResponse;
 import com.projectguard.entity.*;
 import com.projectguard.entity.enums.ProficiencyLevel;
+import com.projectguard.exception.ResourceNotFoundException;
 import com.projectguard.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.data.domain.Page;
@@ -203,26 +204,11 @@ public class AssessmentService {
         if (request.getAttemptId() == null || request.getAttemptId().isBlank()) {
             throw new IllegalArgumentException("attemptId must be provided");
         }
-        if (request.getSkillIds() == null || request.getSkillIds().isEmpty()) {
-            throw new IllegalArgumentException("skillIds must be a non-empty array");
-        }
-        if (request.getAnswers() == null) {
-            throw new IllegalArgumentException("answers list must be provided");
-        }
-
-        List<Long> requestedSkillIds = request.getSkillIds().stream()
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-
-        if (requestedSkillIds.isEmpty()) {
-            throw new IllegalArgumentException("skillIds must contain valid IDs");
-        }
 
         StudentProfile profile = getProfileByUsername(username);
 
         AssessmentAttempt attempt = attemptRepository.findByAttemptId(request.getAttemptId())
-                .orElseThrow(() -> new IllegalArgumentException("Invalid attempt ID"));
+                .orElseThrow(() -> new IllegalArgumentException("Invalid attempt ID: " + request.getAttemptId()));
 
         if (attempt.getStudentProfile() == null ||
                 !attempt.getStudentProfile().getId().equals(profile.getId())) {
@@ -237,7 +223,6 @@ public class AssessmentService {
                 .map(AssessmentQuestion::getId)
                 .collect(Collectors.toSet());
 
-        // Source of truth for scoring: questions stored in this attempt.
         if (attempt.isSubmitted()) {
             throw new IllegalStateException("Assessment attempt has already been submitted");
         }
@@ -246,35 +231,44 @@ public class AssessmentService {
                 .map(q -> q.getSkill().getId())
                 .collect(Collectors.toSet());
 
-        // Frontend skill IDs must match the skills actually issued in this attempt.
-        if (!attemptSkillIds.equals(new HashSet<>(requestedSkillIds))) {
+        List<Long> requestedSkillIds = (request.getSkillIds() != null && !request.getSkillIds().isEmpty())
+                ? request.getSkillIds().stream().filter(Objects::nonNull).distinct().toList()
+                : new ArrayList<>(attemptSkillIds);
+
+        // Frontend skill IDs must be compatible with the skills actually issued in this attempt
+        if (!requestedSkillIds.isEmpty() &&
+                !new HashSet<>(requestedSkillIds).containsAll(attemptSkillIds) &&
+                !attemptSkillIds.containsAll(requestedSkillIds)) {
             throw new IllegalArgumentException("Submitted skills do not match the issued assessment");
         }
 
         Set<Long> seenQuestionIds = new HashSet<>();
-        for (AssessmentSubmitRequest.AnswerSubmission answer : request.getAnswers()) {
-            if (answer == null ||
-                    answer.getQuestionId() == null ||
-                    answer.getSelectedOptionIndex() == null) {
-                throw new IllegalArgumentException(
-                        "questionId and selectedOptionIndex must be provided");
-            }
+        List<AssessmentSubmitRequest.AnswerSubmission> validAnswers = new ArrayList<>();
 
-            if (!seenQuestionIds.add(answer.getQuestionId())) {
-                throw new IllegalArgumentException(
-                        "Duplicate question ID " + answer.getQuestionId() + " in submission");
-            }
+        if (request.getAnswers() != null) {
+            for (AssessmentSubmitRequest.AnswerSubmission answer : request.getAnswers()) {
+                if (answer == null || answer.getQuestionId() == null) {
+                    continue;
+                }
 
-            if (!issuedQuestionIds.contains(answer.getQuestionId())) {
-                throw new IllegalArgumentException(
-                        "Question ID " + answer.getQuestionId() +
-                                " was not issued in this attempt");
-            }
+                if (!seenQuestionIds.add(answer.getQuestionId())) {
+                    throw new IllegalArgumentException(
+                            "Duplicate question ID " + answer.getQuestionId() + " in submission");
+                }
 
-            if (answer.getSelectedOptionIndex() < 0 ||
-                    answer.getSelectedOptionIndex() > 3) {
-                throw new IllegalArgumentException(
-                        "Invalid option index for question " + answer.getQuestionId());
+                if (!issuedQuestionIds.contains(answer.getQuestionId())) {
+                    throw new IllegalArgumentException(
+                            "Question ID " + answer.getQuestionId() + " was not issued in this attempt");
+                }
+
+                // If selectedOptionIndex is provided and valid, record it; negative index indicates unanswered
+                if (answer.getSelectedOptionIndex() != null && answer.getSelectedOptionIndex() >= 0) {
+                    if (answer.getSelectedOptionIndex() > 3) {
+                        throw new IllegalArgumentException(
+                                "Invalid option index for question " + answer.getQuestionId());
+                    }
+                    validAnswers.add(answer);
+                }
             }
         }
 
@@ -294,31 +288,24 @@ public class AssessmentService {
         int totalScore = 0;
         int maxPossibleScore = 0;
         int correctAnswers = 0;
-        int totalQuestions = attempt.getIssuedQuestions().size();
-        List<AssessmentReviewDto> reviews = new ArrayList<>();
+        Set<Long> answeredQuestionIds = new HashSet<>();
 
-        for (AssessmentSubmitRequest.AnswerSubmission answer : request.getAnswers()) {
-            if (answer.getQuestionId() == null || answer.getSelectedOptionIndex() == null) {
-                throw new RuntimeException("questionId and selectedOptionIndex must be provided");
-            }
-            if (!issuedQuestionIds.contains(answer.getQuestionId())) {
-                throw new RuntimeException("Question ID " + answer.getQuestionId() + " was not issued in this attempt");
-            }
+        for (AssessmentSubmitRequest.AnswerSubmission answer : validAnswers) {
+            answeredQuestionIds.add(answer.getQuestionId());
             AssessmentQuestion question = questionRepository.findById(answer.getQuestionId())
                     .orElseThrow(() -> new IllegalArgumentException(
                             "Question not found: " + answer.getQuestionId()));
 
             boolean isCorrect = question.getCorrectOptionIndex().equals(answer.getSelectedOptionIndex());
-            int points = 0;
-            switch (question.getDifficulty()) {
-                case EASY -> points = 1;
-                case MEDIUM -> points = 2;
-                case HARD -> points = 3;
-            }
-            
+            int points = switch (question.getDifficulty()) {
+                case EASY -> 1;
+                case MEDIUM -> 2;
+                case HARD -> 3;
+            };
+
             maxPossibleScore += points;
             if (isCorrect) correctAnswers++;
-            
+
             Long sid = question.getSkill().getId();
             SkillStats ss = skillStatsMap.get(sid);
             if (ss != null) {
@@ -336,10 +323,9 @@ public class AssessmentService {
             domainResult.addAttemptReview(entityReview);
         }
 
-        // Ensure questions that were not answered count towards maxPossibleScore but with 0 points
+        // Ensure questions that were not answered count towards maxPossibleScore with 0 points
         for (AssessmentQuestion q : attempt.getIssuedQuestions()) {
-            boolean answered = seenQuestionIds.contains(q.getId());
-            if (!answered) {
+            if (!answeredQuestionIds.contains(q.getId())) {
                 int points = switch (q.getDifficulty()) {
                     case EASY -> 1;
                     case MEDIUM -> 2;
@@ -348,7 +334,7 @@ public class AssessmentService {
                 maxPossibleScore += points;
                 SkillStats ss = skillStatsMap.get(q.getSkill().getId());
                 if (ss != null) ss.maxScore += points;
-                
+
                 AssessmentAttemptReview entityReview = new AssessmentAttemptReview();
                 entityReview.setQuestion(q);
                 entityReview.setSelectedOptionIndex(-1); // unanswered
@@ -487,9 +473,10 @@ public class AssessmentService {
 
     private StudentProfile getProfileByUsername(String username) {
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .or(() -> userRepository.findByEmail(username))
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
         return profileRepository.findByUserId(user.getId())
-                .orElseThrow(() -> new RuntimeException("Profile not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Profile not found for user: " + username));
     }
     
     private static class SkillStats {

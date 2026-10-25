@@ -17,6 +17,7 @@ public class RecommendationListResponse {
     private String disclaimer;
     private List<ProjectRecommendationResponse> recommendations = new ArrayList<>();
     private String evaluatedAt;
+    private String aiConfigurationStatus;
 
     public RecommendationListResponse() {}
 
@@ -58,4 +59,7 @@ public class RecommendationListResponse {
 
     public String getEvaluatedAt() { return evaluatedAt; }
     public void setEvaluatedAt(String evaluatedAt) { this.evaluatedAt = evaluatedAt; }
+
+    public String getAiConfigurationStatus() { return aiConfigurationStatus; }
+    public void setAiConfigurationStatus(String aiConfigurationStatus) { this.aiConfigurationStatus = aiConfigurationStatus; }
 }

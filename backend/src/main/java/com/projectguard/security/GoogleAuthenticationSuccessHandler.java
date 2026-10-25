@@ -22,6 +22,9 @@ public class GoogleAuthenticationSuccessHandler
     private final UserRepository userRepository;
     private final JwtService jwtService;
 
+    @org.springframework.beans.factory.annotation.Value("${app.frontend-url:http://localhost:5173}")
+    private String frontendUrl;
+
     public GoogleAuthenticationSuccessHandler(
             UserRepository userRepository,
             JwtService jwtService) {
@@ -103,7 +106,7 @@ public class GoogleAuthenticationSuccessHandler
                 user.getRole().name()
         );
 
-        String frontendRedirectUrl =  "http://localhost:54827/oauth2/redirect" +
+        String frontendRedirectUrl = frontendUrl + "/oauth2/redirect" +
                 "?token=" + token +
                 "&username=" + user.getUsername() +
                 "&role=" + user.getRole().name();

@@ -68,11 +68,15 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
 
         config.setAllowedOrigins(List.of(
+                "http://localhost:5173",
+                "http://127.0.0.1:5173",
                 "http://localhost:54827",
-                "http://127.0.0.1:54827"
+                "http://127.0.0.1:54827",
+                "http://localhost:3000",
+                "http://127.0.0.1:3000"
         ));
         config.setAllowedMethods(
-                List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
         );
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
@@ -120,8 +124,9 @@ public class SecurityConfig {
                                 "/api/auth/**"
                         ).permitAll()
 
-                        // Actuator
+                        // Health check endpoints
                         .requestMatchers(
+                                "/api/health",
                                 "/actuator/health"
                         ).permitAll()
 
