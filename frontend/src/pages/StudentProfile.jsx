@@ -437,6 +437,16 @@ const ProfileForm = ({
         if (!form.domainId)  errs.domainId  = 'Please select your project domain.';
         if (!form.teamSize)  errs.teamSize  = 'Team size is required.';
         if (!form.availableTimeWeeks) errs.availableTimeWeeks = 'Available time is required.';
+
+        const selectedBranch = branches.find((b) => String(b.id) === String(form.branchId));
+        if (selectedBranch) {
+            const lower = selectedBranch.name.toLowerCase();
+            const isEng = lower.includes('engineering') || ['cse', 'ise', 'ece', 'eee', 'mech', 'civil'].some(s => lower.includes(s));
+            if (isEng && !form.academicLevel) {
+                errs.academicLevel = 'Academic level (UG / PG) is required for engineering branches.';
+            }
+        }
+
         return errs;
     };
 
@@ -456,6 +466,7 @@ const ProfileForm = ({
                 branchId:           Number(form.branchId),
                 academicLevel:      form.academicLevel || null,
                 domainId:           Number(form.domainId),
+                technologyId:       selectedTechnologyId ? Number(selectedTechnologyId) : null,
                 teamSize:           Number(form.teamSize),
                 availableTimeWeeks: Number(form.availableTimeWeeks),
                 previousExperience: form.previousExperience,
@@ -518,17 +529,20 @@ const ProfileForm = ({
                         </FormSelect>
                     </div>
 
-                    <FormSelect
-                        id="academic-level"
-                        label="Academic Level"
-                        value={form.academicLevel}
-                        onChange={set('academicLevel')}
-                    >
-                        <option value="">— Select level —</option>
-                        {ACADEMIC_LEVELS.map((l) => (
-                            <option key={l.value} value={l.value}>{l.label}</option>
-                        ))}
-                    </FormSelect>
+                    <div data-error={Boolean(errors.academicLevel)}>
+                        <FormSelect
+                            id="academic-level"
+                            label="Academic Level"
+                            value={form.academicLevel}
+                            onChange={set('academicLevel')}
+                            error={errors.academicLevel}
+                        >
+                            <option value="">— Select level —</option>
+                            {ACADEMIC_LEVELS.map((l) => (
+                                <option key={l.value} value={l.value}>{l.label}</option>
+                            ))}
+                        </FormSelect>
+                    </div>
 
                     <div data-error={Boolean(errors.domainId)}>
                         <FormSelect
@@ -883,8 +897,8 @@ const StudentProfilePage = () => {
                 skills: skills.map((s) => ({
                     skillId:           s.skillId || null,
                     skillName:         s.skillName || null,
-                    proficiencyLevel:  s.proficiencyLevel,
-                    yearsOfExperience: s.yearsOfExperience,
+                    proficiencyLevel:  s.proficiencyLevel || 'BEGINNER',
+                    yearsOfExperience: s.yearsOfExperience != null ? Number(s.yearsOfExperience) : 0.0,
                 })),
             });
             let finalProfile = skillsRes.data;

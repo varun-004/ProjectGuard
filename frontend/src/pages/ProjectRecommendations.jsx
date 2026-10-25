@@ -56,6 +56,16 @@ const ProjectDetailModal = ({ project, onClose }) => {
                             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
                                 Rank #{project.rankOrder}
                             </span>
+                            {project.isFreshAlternative && (
+                                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-400/20 text-amber-200 border border-amber-400/30">
+                                    ✨ Fresh Alternative
+                                </span>
+                            )}
+                            {project.isGeneratedIdea && (
+                                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-400/20 text-purple-200 border border-purple-400/30">
+                                    💡 AI Synthesized
+                                </span>
+                            )}
                             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
                                 Quality Score: {project.qualityScore ? Math.round(project.qualityScore) : 85}/100
                             </span>
@@ -80,29 +90,52 @@ const ProjectDetailModal = ({ project, onClose }) => {
                 <div className="overflow-y-auto p-6 space-y-6 text-sm text-gray-700 divide-y divide-gray-100">
                     
                     {/* Compatibility & Score Explanation Banner */}
-                    <div className="bg-indigo-50/80 border border-indigo-100 rounded-xl p-4 space-y-2">
-                        <div className="flex items-center justify-between">
-                            <span className="font-semibold text-indigo-900 text-sm">Personalized Student Compatibility</span>
-                            <span className="text-base font-bold text-indigo-700">{project.matchScore}% Match</span>
+                    <div className="bg-indigo-50/80 border border-indigo-100 rounded-xl p-4 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <span className="font-bold text-indigo-950 text-sm">Personalized Student Compatibility & Profile Match</span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <span className="px-2.5 py-1 rounded-lg text-xs font-extrabold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                    Suitability: {Math.round(project.suitabilityScore || project.matchScore)}%
+                                </span>
+                                <span className="px-2.5 py-1 rounded-lg text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                    Feasibility: {Math.round(project.feasibilityScore || 85)}%
+                                </span>
+                                <span className="px-2.5 py-1 rounded-lg text-xs font-extrabold bg-slate-900 text-white shadow-sm">
+                                    Overall: {Math.round(project.matchScore)}% Match
+                                </span>
+                            </div>
                         </div>
-                        <p className="text-xs text-indigo-800 leading-relaxed">
+                        <p className="text-xs text-indigo-900 leading-relaxed font-medium">
                             {project.scoreExplanation}
                         </p>
+                        {project.recommendationReasons && project.recommendationReasons.length > 0 && (
+                            <div className="pt-2 border-t border-indigo-100/80 space-y-1">
+                                <span className="text-[11px] font-bold text-indigo-900 uppercase tracking-wide block">Why this project matches your profile:</span>
+                                <ul className="space-y-1 text-xs text-indigo-900">
+                                    {project.recommendationReasons.map((reason, i) => (
+                                        <li key={i} className="flex items-start gap-1.5">
+                                            <span className="text-emerald-600 font-bold shrink-0">✓</span>
+                                            <span>{reason}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
                         {project.scoreBreakdown && (
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 text-xs">
-                                <div className="bg-white/80 p-2 rounded-lg border border-indigo-100">
+                                <div className="bg-white/90 p-2 rounded-lg border border-indigo-100">
                                     <span className="text-gray-500 block">Domain Fit</span>
                                     <span className="font-semibold text-gray-800">{project.scoreBreakdown.domainFitScore} / 25</span>
                                 </div>
-                                <div className="bg-white/80 p-2 rounded-lg border border-indigo-100">
+                                <div className="bg-white/90 p-2 rounded-lg border border-indigo-100">
                                     <span className="text-gray-500 block">Tech Fit</span>
                                     <span className="font-semibold text-gray-800">{project.scoreBreakdown.techFitScore} / 20</span>
                                 </div>
-                                <div className="bg-white/80 p-2 rounded-lg border border-indigo-100">
+                                <div className="bg-white/90 p-2 rounded-lg border border-indigo-100">
                                     <span className="text-gray-500 block">Skills Compatibility</span>
                                     <span className="font-semibold text-gray-800">{project.scoreBreakdown.skillFitScore} / 25</span>
                                 </div>
-                                <div className="bg-white/80 p-2 rounded-lg border border-indigo-100">
+                                <div className="bg-white/90 p-2 rounded-lg border border-indigo-100">
                                     <span className="text-gray-500 block">Assessed Mastery</span>
                                     <span className="font-semibold text-gray-800">{project.scoreBreakdown.proficiencyScore} / 15</span>
                                 </div>
@@ -198,7 +231,66 @@ const ProjectDetailModal = ({ project, onClose }) => {
                         </div>
                     </div>
 
-                    {/* Section 6: Assessed Skills Match Breakdown */}
+                    {/* Section 6: Required Technologies & Interdisciplinary Skills */}
+                    <div className="pt-4 space-y-3">
+                        <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                            <span>💻</span> Required Technologies & Technical Skills
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-100 space-y-2">
+                                <span className="font-bold text-gray-900 uppercase block">Required Technologies</span>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {project.technologies && project.technologies.length > 0 ? (
+                                        project.technologies.map((t, i) => (
+                                            <span key={i} className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 border border-blue-200 font-semibold text-xs">
+                                                {t}
+                                            </span>
+                                        ))
+                                    ) : (
+                                        <span className="text-gray-500 italic">Core engineering stack</span>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-100 space-y-2">
+                                <span className="font-bold text-gray-900 uppercase block">Required Skills</span>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {project.requiredSkills && project.requiredSkills.length > 0 ? (
+                                        project.requiredSkills.map((s, i) => (
+                                            <span key={i} className="px-2.5 py-1 rounded-lg bg-purple-50 text-purple-800 border border-purple-200 font-semibold text-xs">
+                                                {s}
+                                            </span>
+                                        ))
+                                    ) : (
+                                        <span className="text-gray-500 italic">Interdisciplinary competencies</span>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Identified Skill Gaps & Action Items */}
+                    {project.identifiedGaps && project.identifiedGaps.length > 0 && (
+                        <div className="pt-4 space-y-2">
+                            <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                                <span>⚠️</span> Identified Skill Gaps & Action Items
+                            </h3>
+                            <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-4 text-xs space-y-2">
+                                <p className="text-amber-900 font-medium">
+                                    Before undertaking this project, the system identified the following technical gaps based on your profile and assessments:
+                                </p>
+                                <ul className="space-y-1.5 text-amber-950">
+                                    {project.identifiedGaps.map((gap, i) => (
+                                        <li key={i} className="flex items-start gap-2">
+                                            <span className="text-amber-600 font-bold shrink-0">•</span>
+                                            <span>{gap}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Section 7: Assessed Skills Match Breakdown */}
                     {project.assessedSkillsMatch && project.assessedSkillsMatch.length > 0 && (
                         <div className="pt-4 space-y-3">
                             <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
@@ -387,6 +479,30 @@ const ProjectRecommendations = () => {
                 </div>
             </div>
 
+            {/* ─── AI Configuration & Idea Synthesis Engine Status Banner ────── */}
+            {data?.aiConfigurationStatus && (
+                <div className="bg-slate-900 text-slate-200 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm flex items-start gap-3.5 text-xs">
+                    <span className="text-xl">🤖</span>
+                    <div className="flex-1 space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-white uppercase tracking-wider text-[11px]">
+                                Idea Synthesis Engine:
+                            </span>
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                data.aiConfigurationStatus.includes('Live External')
+                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                    : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                            }`}>
+                                {data.aiConfigurationStatus.includes('Live External') ? 'Live External LLM Active' : 'Domain-Grounded Synthesizer Active'}
+                            </span>
+                        </div>
+                        <p className="text-slate-300 leading-relaxed">
+                            {data.aiConfigurationStatus}
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* ─── Controls: Search, Filters & Sorting ───────────────────────── */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5 flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between">
                 <div className="relative flex-1">
@@ -521,10 +637,20 @@ const ProjectRecommendations = () => {
                         >
                             {/* Left Score Column */}
                             <div className="p-6 md:w-56 shrink-0 flex flex-col items-center justify-center text-center bg-gradient-to-b from-gray-50/50 to-white">
-                                <div className="mb-2">
+                                <div className="mb-2 flex flex-col items-center gap-1">
                                     <span className="px-3 py-1 rounded-full text-xs font-extrabold uppercase bg-slate-900 text-white tracking-wide shadow-sm">
                                         Rank #{item.rankOrder}
                                     </span>
+                                    {item.isFreshAlternative && (
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                            ✨ Fresh Alternative
+                                        </span>
+                                    )}
+                                    {item.isGeneratedIdea && (
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
+                                            💡 AI Synthesized
+                                        </span>
+                                    )}
                                 </div>
 
                                 {/* Circular Score Display */}
@@ -540,11 +666,19 @@ const ProjectRecommendations = () => {
                                     </div>
                                 </div>
 
-                                <div className="mt-2 space-y-1">
-                                    <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                {/* Feasibility & Suitability Scores */}
+                                <div className="mt-2 space-y-1.5 w-full px-1">
+                                    <div className="flex items-center justify-between text-[11px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200 px-2 py-1 rounded-lg">
+                                        <span>Suitability:</span>
+                                        <span className="font-extrabold">{Math.round(item.suitabilityScore || item.matchScore)}%</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-1 rounded-lg">
+                                        <span>Feasibility:</span>
+                                        <span className="font-extrabold">{Math.round(item.feasibilityScore || 85)}%</span>
+                                    </div>
+                                    <span className="inline-block w-full text-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-gray-100 text-gray-600">
                                         Quality: {item.qualityScore ? Math.round(item.qualityScore) : 85}/100
                                     </span>
-                                    <p className="text-[10px] text-gray-400">Verified Problem Gate</p>
                                 </div>
                             </div>
 
@@ -564,6 +698,11 @@ const ProjectRecommendations = () => {
                                         <span className="text-xs text-gray-500 flex items-center gap-1">
                                             ⏱ ~{item.estimatedWeeks} weeks
                                         </span>
+                                        {item.academicLevelSuitability && (
+                                            <span className="text-xs text-gray-500 flex items-center gap-1">
+                                                🎓 {item.academicLevelSuitability}
+                                            </span>
+                                        )}
                                     </div>
 
                                     <h2 className="text-lg sm:text-xl font-bold text-gray-900 hover:text-indigo-600 transition-colors">
@@ -573,13 +712,28 @@ const ProjectRecommendations = () => {
 
                                 {/* Problem Summary */}
                                 <div className="bg-gray-50 rounded-xl p-3.5 border border-gray-100 text-xs text-gray-700 leading-relaxed">
-                                    <strong className="text-gray-900 block mb-1">Real-World Problem Context:</strong>
+                                    <strong className="text-gray-900 block mb-1">🚨 Real-World Problem Context:</strong>
                                     {item.problemStatement ? (
                                         <p className="line-clamp-2">{item.problemStatement}</p>
                                     ) : (
                                         <p className="line-clamp-2">{item.description}</p>
                                     )}
                                 </div>
+
+                                {/* Proposed Solution & Industry Use Case Snippet */}
+                                {item.proposedSolution && (
+                                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/70 text-xs text-slate-700 leading-relaxed">
+                                        <strong className="text-slate-900 block mb-0.5">⚙️ Proposed Solution & Workflow:</strong>
+                                        <p className="line-clamp-2">{item.proposedSolution}</p>
+                                    </div>
+                                )}
+
+                                {item.industryValue && (
+                                    <div className="bg-blue-50/60 rounded-xl p-2.5 border border-blue-100 text-xs text-blue-900 leading-relaxed flex items-start gap-1.5">
+                                        <strong className="shrink-0 text-blue-800">🌐 Industry Use Case:</strong>
+                                        <p className="line-clamp-1">{item.industryValue}</p>
+                                    </div>
+                                )}
 
                                 {/* Outcome / KPIs Snippet */}
                                 {item.expectedOutcomeKpis && (
@@ -592,39 +746,60 @@ const ProjectRecommendations = () => {
                                 {/* Recommendation Reasons & Disclosed Gaps */}
                                 <div className="space-y-2 pt-1">
                                     {item.recommendationReasons && item.recommendationReasons.length > 0 && (
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {item.recommendationReasons.slice(0, 2).map((reason, i) => (
-                                                <span key={i} className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
-                                                    <span>✓</span> {reason}
-                                                </span>
-                                            ))}
+                                        <div>
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Why Matched:</span>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {item.recommendationReasons.slice(0, 2).map((reason, i) => (
+                                                    <span key={i} className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                                        <span>✓</span> {reason}
+                                                    </span>
+                                                ))}
+                                            </div>
                                         </div>
                                     )}
 
                                     {item.identifiedGaps && item.identifiedGaps.length > 0 && (
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {item.identifiedGaps.slice(0, 2).map((gap, i) => (
-                                                <span key={i} className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
-                                                    <span>⚠️</span> {gap}
-                                                </span>
-                                            ))}
+                                        <div>
+                                            <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block mb-1">Identified Gaps:</span>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {item.identifiedGaps.slice(0, 2).map((gap, i) => (
+                                                    <span key={i} className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                                                        <span>⚠️</span> {gap}
+                                                    </span>
+                                                ))}
+                                            </div>
                                         </div>
                                     )}
                                 </div>
 
-                                {/* Card Actions */}
-                                <div className="pt-2 flex items-center justify-between">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                        {item.technologies?.slice(0, 3).map((t, i) => (
-                                            <span key={i} className="text-[10px] font-semibold bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
-                                                {t}
-                                            </span>
-                                        ))}
+                                {/* Required Technologies & Skills Badges and Action Button */}
+                                <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-gray-100">
+                                    <div className="flex flex-col gap-1 text-[11px]">
+                                        {item.technologies && item.technologies.length > 0 && (
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <span className="font-bold text-gray-500 text-[10px] uppercase">Tech:</span>
+                                                {item.technologies.slice(0, 4).map((t, i) => (
+                                                    <span key={i} className="text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded">
+                                                        {t}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {item.requiredSkills && item.requiredSkills.length > 0 && (
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <span className="font-bold text-gray-500 text-[10px] uppercase">Skills:</span>
+                                                {item.requiredSkills.slice(0, 4).map((s, i) => (
+                                                    <span key={i} className="text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-100 px-2 py-0.5 rounded">
+                                                        {s}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
 
                                     <button
                                         onClick={() => setSelectedProject(item)}
-                                        className="px-4 py-2 text-xs font-bold rounded-xl bg-gray-900 hover:bg-indigo-600 text-white shadow-sm transition-colors flex items-center gap-1.5"
+                                        className="px-4 py-2 text-xs font-bold rounded-xl bg-gray-900 hover:bg-indigo-600 text-white shadow-sm transition-colors flex items-center gap-1.5 shrink-0 self-end sm:self-auto"
                                     >
                                         <span>View Full Project Dossier</span>
                                         <span>→</span>

@@ -182,11 +182,11 @@ const Assessments = () => {
         setQuizLoading(true);
         setError('');
         try {
-            const submissions = Object.keys(answers).map(qid => ({
-                questionId: Number(qid),
-                selectedOptionIndex: answers[qid],
+            const submissions = questions.map(q => ({
+                questionId: Number(q.id),
+                selectedOptionIndex: answers[q.id] !== undefined ? Number(answers[q.id]) : -1,
             }));
-            const res = await assessmentService.submitAssessment(attemptId, selectedSkillIds, submissions);
+            const res = await assessmentService.submitAssessment(attemptId, selectedSkillIds.map(Number), submissions);
             setCurrentResult(res.data);
             setView('result');
         } catch (err) {
