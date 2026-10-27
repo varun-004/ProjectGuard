@@ -36,6 +36,8 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
 
     boolean existsByTitle(String title);
 
+    boolean existsByTitleIgnoreCase(String title);
+
     @Query("SELECT DISTINCT p FROM Project p " +
            "LEFT JOIN FETCH p.domain " +
            "WHERE p.id = :id AND p.isCatalog = true")

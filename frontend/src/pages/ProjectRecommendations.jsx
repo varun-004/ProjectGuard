@@ -370,6 +370,12 @@ const ProjectRecommendations = () => {
     const [minMatch, setMinMatch] = useState(0);
     const [sortBy, setSortBy] = useState('RANK');
 
+    // ── Generate Fresh (Gemini) state ────────────────────────────────────────
+    const [generateCount, setGenerateCount] = useState(3);
+    const [generating, setGenerating] = useState(false);
+    const [generateResult, setGenerateResult] = useState(null);
+    const [generateError, setGenerateError] = useState(null);
+
     const fetchRecommendations = async (forceRefresh = false) => {
         if (forceRefresh) setRefreshing(true);
         else setLoading(true);
@@ -392,6 +398,25 @@ const ProjectRecommendations = () => {
     useEffect(() => {
         fetchRecommendations(false);
     }, []);
+
+    const handleGenerateFresh = async () => {
+        if (generating) return; // prevent duplicate in-flight submissions
+        setGenerating(true);
+        setGenerateResult(null);
+        setGenerateError(null);
+
+        try {
+            const res = await recommendationService.generateFresh(generateCount);
+            setGenerateResult(res.data);
+        } catch (err) {
+            console.error('Error generating fresh projects:', err);
+            const msg = err.response?.data?.message || err.response?.data?.error ||
+                'Failed to generate projects. Please try again later.';
+            setGenerateError(msg);
+        } finally {
+            setGenerating(false);
+        }
+    };
 
     // Filter and sort items
     const rawList = data?.recommendations || [];
@@ -502,6 +527,244 @@ const ProjectRecommendations = () => {
                     </div>
                 </div>
             )}
+
+            {/* ─── Generate Fresh Industry Projects Panel (Gemini) ───────────── */}
+            <div className="bg-gradient-to-br from-violet-950 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 border border-violet-800/40 shadow-xl shadow-violet-950/30 text-white relative overflow-hidden">
+                {/* Background glow */}
+                <div className="absolute top-0 right-0 w-64 h-64 bg-violet-500/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+
+                <div className="relative flex flex-col lg:flex-row lg:items-start gap-6">
+                    {/* Left: Description */}
+                    <div className="flex-1 space-y-3">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                            <span>✨</span>
+                            <span>Gemini AI · Backend-Powered</span>
+                        </div>
+                        <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight">
+                            Generate Fresh Industry Projects
+                        </h2>
+                        <p className="text-violet-200/80 text-sm leading-relaxed max-w-xl">
+                            Powered by Google Gemini on the server — your API key is never sent to the browser.
+                            Generates novel, real-world project ideas personalised to your branch, technology stack,
+                            declared skills, and quiz assessment scores.
+                        </p>
+                        <ul className="text-xs text-violet-300/70 space-y-1">
+                            <li>• Projects are saved, then scored by the existing recommendation engine</li>
+                            <li>• No generic CRUD or tutorial clones — industry-level only</li>
+                            <li>• Duplicate titles are automatically skipped</li>
+                        </ul>
+                    </div>
+
+                    {/* Right: Controls */}
+                    <div className="flex flex-col gap-4 lg:min-w-[220px]">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-semibold text-violet-300 uppercase tracking-wider" htmlFor="generate-count">
+                                Number of Ideas
+                            </label>
+                            <select
+                                id="generate-count"
+                                value={generateCount}
+                                onChange={(e) => setGenerateCount(Number(e.target.value))}
+                                disabled={generating}
+                                className="w-full px-3 py-2 text-sm font-medium text-white bg-white/10 border border-violet-500/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-400/40 disabled:opacity-50 transition-all"
+                            >
+                                {[1, 2, 3, 4, 5].map(n => (
+                                    <option key={n} value={n} className="bg-slate-900">{n} project{n > 1 ? 's' : ''}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <button
+                            id="btn-generate-fresh"
+                            onClick={handleGenerateFresh}
+                            disabled={generating}
+                            className={`flex items-center justify-center gap-2 w-full px-5 py-3 text-sm font-bold rounded-xl transition-all shadow-lg ${
+                                generating
+                                    ? 'bg-violet-700/50 cursor-not-allowed opacity-70'
+                                    : 'bg-gradient-to-r from-violet-500 to-indigo-500 hover:from-violet-600 hover:to-indigo-600 active:scale-95 shadow-violet-500/30'
+                            } text-white`}
+                        >
+                            {generating ? (
+                                <>
+                                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                    <span>Generating via Gemini…</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span>✨</span>
+                                    <span>Generate Fresh Projects</span>
+                                </>
+                            )}
+                        </button>
+
+                        <p className="text-[10px] text-violet-400/60 text-center">
+                            Max 5 per request · Requires GEMINI_API_KEY on server
+                        </p>
+                    </div>
+                </div>
+
+                {/* ── Generation Result Area ───────────────────────────────── */}
+
+                {/* Loading skeleton */}
+                {generating && (
+                    <div className="mt-6 pt-5 border-t border-violet-800/40 space-y-4">
+                        <p className="text-xs text-violet-300 font-medium animate-pulse">
+                            🤖 Calling Gemini AI, validating output, and saving projects…
+                        </p>
+                        {[1, 2, 3].slice(0, generateCount).map(n => (
+                            <div key={n} className="bg-white/5 rounded-2xl p-5 border border-violet-700/30 animate-pulse space-y-3">
+                                <div className="h-5 bg-violet-300/10 rounded-md w-3/4" />
+                                <div className="h-12 bg-violet-300/10 rounded-md w-full" />
+                                <div className="flex gap-2">
+                                    <div className="h-5 bg-violet-300/10 rounded-full w-20" />
+                                    <div className="h-5 bg-violet-300/10 rounded-full w-24" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Error state */}
+                {!generating && generateError && (
+                    <div className="mt-6 pt-5 border-t border-violet-800/40">
+                        <div className="bg-rose-950/60 border border-rose-700/40 rounded-2xl p-5 flex items-start gap-3">
+                            <span className="text-2xl">⚠️</span>
+                            <div>
+                                <p className="text-sm font-bold text-rose-300">Generation Failed</p>
+                                <p className="text-xs text-rose-400/80 mt-1">{generateError}</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Success — no results (all duplicates or validation failures) */}
+                {!generating && generateResult && generateResult.recommendations?.length === 0 && (
+                    <div className="mt-6 pt-5 border-t border-violet-800/40">
+                        <div className="bg-amber-950/40 border border-amber-700/30 rounded-2xl p-5 flex items-start gap-3">
+                            <span className="text-2xl">🔁</span>
+                            <div>
+                                <p className="text-sm font-bold text-amber-300">No New Projects Saved</p>
+                                <p className="text-xs text-amber-400/80 mt-1">{generateResult.message}</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Success — project cards */}
+                {!generating && generateResult && generateResult.recommendations?.length > 0 && (
+                    <div className="mt-6 pt-5 border-t border-violet-800/40 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm font-bold text-violet-200">
+                                ✅ {generateResult.message}
+                            </p>
+                            <span className="text-xs text-violet-400/60">
+                                Generated {generateResult.generatedAt}
+                            </span>
+                        </div>
+
+                        {generateResult.recommendations.map((item) => (
+                            <div
+                                key={item.projectId}
+                                className="bg-white/5 backdrop-blur-sm rounded-2xl border border-violet-700/30 hover:border-violet-500/50 p-5 space-y-3 transition-all"
+                            >
+                                {/* Header */}
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="space-y-1 flex-1">
+                                        <div className="flex flex-wrap gap-1.5">
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                                                ✨ AI Generated
+                                            </span>
+                                            {item.complexityLevel && (
+                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white/10 text-white/70">
+                                                    {item.complexityLevel}
+                                                </span>
+                                            )}
+                                            {item.domainName && (
+                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-indigo-500/20 text-indigo-300">
+                                                    {item.domainName}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <h3 className="text-base font-bold text-white leading-snug">
+                                            {item.title}
+                                        </h3>
+                                    </div>
+                                    {/* Match score badge */}
+                                    <div className="flex flex-col items-center shrink-0">
+                                        <div className={`flex flex-col items-center justify-center h-16 w-16 rounded-full bg-gradient-to-tr ${
+                                            item.matchScore >= 65 ? 'from-emerald-500 to-teal-600' :
+                                            item.matchScore >= 40 ? 'from-amber-500 to-orange-600' :
+                                            'from-slate-600 to-slate-700'
+                                        } text-white shadow-md`}>
+                                            <span className="text-xl font-black leading-none">{Math.round(item.matchScore)}%</span>
+                                            <span className="text-[9px] font-bold uppercase opacity-80">Match</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Problem statement */}
+                                {item.problemStatement && (
+                                    <div className="bg-white/5 rounded-xl p-3 text-xs text-violet-100/80 leading-relaxed">
+                                        <strong className="text-violet-200 block mb-1">🚨 Problem:</strong>
+                                        <p className="line-clamp-2">{item.problemStatement}</p>
+                                    </div>
+                                )}
+
+                                {/* Proposed solution */}
+                                {item.proposedSolution && (
+                                    <div className="text-xs text-violet-200/70 bg-white/5 rounded-xl p-3 leading-relaxed">
+                                        <strong className="text-violet-200 block mb-1">⚙️ Solution:</strong>
+                                        <p className="line-clamp-2">{item.proposedSolution}</p>
+                                    </div>
+                                )}
+
+                                {/* MVP scope */}
+                                {item.functionalRequirements && (
+                                    <div className="text-xs text-emerald-300/70 bg-emerald-900/10 rounded-xl p-2.5 leading-relaxed">
+                                        <strong className="text-emerald-300 block mb-0.5">📦 MVP Scope:</strong>
+                                        <p className="line-clamp-1">{item.functionalRequirements}</p>
+                                    </div>
+                                )}
+
+                                {/* Evaluation metrics */}
+                                {item.expectedOutcomeKpis && (
+                                    <div className="text-xs text-blue-300/70 flex items-start gap-2">
+                                        <span className="text-blue-400 font-bold shrink-0">🎯 KPIs:</span>
+                                        <p className="line-clamp-1">{item.expectedOutcomeKpis}</p>
+                                    </div>
+                                )}
+
+                                {/* Skills & Technologies */}
+                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                    {item.technologies?.slice(0, 4).map((t, i) => (
+                                        <span key={i} className="text-[10px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/20 px-2 py-0.5 rounded">
+                                            {t}
+                                        </span>
+                                    ))}
+                                    {item.requiredSkills?.slice(0, 3).map((s, i) => (
+                                        <span key={i} className="text-[10px] font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/20 px-2 py-0.5 rounded">
+                                            {s}
+                                        </span>
+                                    ))}
+                                </div>
+
+                                {/* View full dossier */}
+                                <div className="flex justify-end pt-1">
+                                    <button
+                                        onClick={() => setSelectedProject(item)}
+                                        className="px-4 py-1.5 text-xs font-bold rounded-xl bg-violet-600 hover:bg-violet-500 text-white transition-colors"
+                                    >
+                                        View Full Dossier →
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
 
             {/* ─── Controls: Search, Filters & Sorting ───────────────────────── */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5 flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between">

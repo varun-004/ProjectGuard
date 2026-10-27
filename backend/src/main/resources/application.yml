@@ -62,3 +62,13 @@ projectguard:
     provider: ${AI_PROVIDER:none}
     api-key: ${AI_API_KEY:}
     model: ${AI_MODEL:gemini-1.5-flash}
+
+
+gemini:
+  api:
+    key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-3.5-flash}
+    timeout-seconds: ${GEMINI_TIMEOUT_SECONDS:60}
+    max-generate-count: ${GEMINI_MAX_GENERATE_COUNT:5}
+    default-generate-count: ${GEMINI_DEFAULT_GENERATE_COUNT:3}
+    
