@@ -15,12 +15,23 @@ const Navbar = () => {
 
     const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + '/');
 
-    const navLinks = [
+    const isAdmin = user?.role === 'ROLE_ADMIN';
+
+    const studentLinks = [
         { to: '/dashboard', label: 'Dashboard', icon: '⊞' },
         { to: '/profile',   label: 'My Profile', icon: '◎' },
         { to: '/assessments', label: 'Assessments', icon: '✦' },
         { to: '/recommendations', label: 'Recommendations', icon: '✨' },
     ];
+
+    const adminLinks = [
+        { to: '/admin', label: '🔐 Admin', icon: '🔐' },
+        { to: '/dashboard', label: 'Dashboard', icon: '⊞' },
+        { to: '/recommendations', label: 'Projects', icon: '📂' },
+        { to: '/assessments', label: 'Assessments', icon: '✦' },
+    ];
+
+    const navLinks = isAdmin ? adminLinks : studentLinks;
 
     return (
         <nav className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-200/80 shadow-sm">

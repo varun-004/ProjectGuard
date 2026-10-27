@@ -2,6 +2,7 @@ package com.projectguard.repository;
 
 import com.projectguard.entity.User;
 import com.projectguard.entity.enums.AuthProvider;
+import com.projectguard.entity.enums.Role;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
@@ -20,4 +21,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByUsername(String username);
 
     boolean existsByEmail(String email);
+
+    long countByRole(Role role);
 }

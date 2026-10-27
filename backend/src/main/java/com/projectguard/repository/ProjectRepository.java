@@ -42,4 +42,10 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
            "LEFT JOIN FETCH p.domain " +
            "WHERE p.id = :id AND p.isCatalog = true")
     Optional<Project> findCatalogProjectWithAllDetailsById(@Param("id") Long id);
+
+    long countByIsCatalogTrue();
+
+    long countByIsCatalogTrueAndQualityApprovedTrue();
+
+    long countByStudentProfileIdIsNotNull();
 }

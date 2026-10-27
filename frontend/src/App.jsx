@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import StudentProfile from './pages/StudentProfile';
 import Assessments from './pages/Assessments';
 import ProjectRecommendations from './pages/ProjectRecommendations';
+import AdminDashboard from './pages/AdminDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import OAuth2RedirectHandler from './pages/OAuth2RedirectHandler';
 
@@ -30,6 +31,7 @@ function App() {
                 <Route path="/profile" element={<StudentProfile />} />
                 <Route path="/assessments" element={<Assessments />} />
                 <Route path="/recommendations" element={<ProjectRecommendations />} />
+                <Route path="/admin" element={<AdminDashboard />} />
               </Route>
               
               {/* Fallback */}
