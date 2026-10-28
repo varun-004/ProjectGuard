@@ -1,10 +1,13 @@
 package com.projectguard.service;
 
+import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.projectguard.dto.recommendation.GenerateFreshProjectsResponse;
 import com.projectguard.dto.recommendation.ProjectRecommendationResponse;
+import com.projectguard.dto.recommendation.RecommendationHistoryDto;
+import com.projectguard.dto.recommendation.ScoreBreakdownDto;
 import com.projectguard.entity.*;
 import com.projectguard.exception.BadRequestException;
 import com.projectguard.exception.ResourceNotFoundException;
@@ -32,12 +35,15 @@ import java.util.stream.Collectors;
  * <ol>
  *   <li>Resolve the authenticated student's profile using the Security Context (never a client-supplied ID).</li>
  *   <li>Assemble the four student input groups (branch, technology, declared skills, actual assessment results).</li>
+ *   <li>Retrieve prior generated project ideas to avoid exact-title and semantic duplicates on repeated requests.</li>
  *   <li>Call Google Gemini REST API securely (using x-goog-api-key header; never logging keys or credentials in URLs).</li>
+ *   <li>Apply bounded retries for transient HTTP errors (500, 502, 503, 504) and network glitches.</li>
  *   <li>Robustly parse, extract, and validate structured JSON output.</li>
- *   <li>Check for duplicates against existing project titles (case-insensitive).</li>
+ *   <li>Check for duplicates against existing project titles (case-insensitive and intra-batch).</li>
  *   <li>Persist non-duplicate projects and link them to database Technologies and Skills.</li>
  *   <li>Score each project using the unmodified {@link RecommendationEngineService} so scores reflect actual student inputs.</li>
- *   <li>Return transparent scoring, breakdown, and generation metadata.</li>
+ *   <li>Track recommendation history in {@link StudentRecommendationHistoryRepository} to preserve history across quiz changes.</li>
+ *   <li>Return transparent scoring, breakdown, and generation metadata reporting partial success honestly.</li>
  * </ol>
  */
 @Service
@@ -71,8 +77,36 @@ public class AiProjectGeneratorService {
     private final TechnologyRepository technologyRepository;
     private final EngineeringBranchRepository branchRepository;
     private final RecommendationEngineService recommendationEngineService;
+    private final StudentRecommendationHistoryRepository historyRepository;
+    private final StudentProjectRecommendationRepository recommendationRepository;
     private final ObjectMapper objectMapper;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    public AiProjectGeneratorService(
+            UserRepository userRepository,
+            StudentProfileRepository studentProfileRepository,
+            AssessmentResultRepository assessmentResultRepository,
+            ProjectRepository projectRepository,
+            SkillRepository skillRepository,
+            TechnologyRepository technologyRepository,
+            EngineeringBranchRepository branchRepository,
+            RecommendationEngineService recommendationEngineService,
+            StudentRecommendationHistoryRepository historyRepository,
+            StudentProjectRecommendationRepository recommendationRepository) {
+        this.userRepository = userRepository;
+        this.studentProfileRepository = studentProfileRepository;
+        this.assessmentResultRepository = assessmentResultRepository;
+        this.projectRepository = projectRepository;
+        this.skillRepository = skillRepository;
+        this.technologyRepository = technologyRepository;
+        this.branchRepository = branchRepository;
+        this.recommendationEngineService = recommendationEngineService;
+        this.historyRepository = historyRepository;
+        this.recommendationRepository = recommendationRepository;
+        this.objectMapper = createConfiguredObjectMapper();
+    }
+
+    /** Backward-compatible constructor for testing. */
     public AiProjectGeneratorService(
             UserRepository userRepository,
             StudentProfileRepository studentProfileRepository,
@@ -82,15 +116,19 @@ public class AiProjectGeneratorService {
             TechnologyRepository technologyRepository,
             EngineeringBranchRepository branchRepository,
             RecommendationEngineService recommendationEngineService) {
-        this.userRepository = userRepository;
-        this.studentProfileRepository = studentProfileRepository;
-        this.assessmentResultRepository = assessmentResultRepository;
-        this.projectRepository = projectRepository;
-        this.skillRepository = skillRepository;
-        this.technologyRepository = technologyRepository;
-        this.branchRepository = branchRepository;
-        this.recommendationEngineService = recommendationEngineService;
-        this.objectMapper = new ObjectMapper();
+        this(userRepository, studentProfileRepository, assessmentResultRepository,
+             projectRepository, skillRepository, technologyRepository,
+             branchRepository, recommendationEngineService, null, null);
+    }
+
+    private static ObjectMapper createConfiguredObjectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(JsonReadFeature.ALLOW_TRAILING_COMMA.mappedFeature(), true);
+        mapper.configure(JsonReadFeature.ALLOW_UNQUOTED_FIELD_NAMES.mappedFeature(), true);
+        mapper.configure(JsonReadFeature.ALLOW_SINGLE_QUOTES.mappedFeature(), true);
+        mapper.configure(JsonReadFeature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER.mappedFeature(), true);
+        mapper.configure(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.mappedFeature(), true);
+        return mapper;
     }
 
     // ─── Public API ──────────────────────────────────────────────────────────
@@ -118,7 +156,8 @@ public class AiProjectGeneratorService {
     /**
      * Generates fresh, personalised project ideas for the authenticated student
      * using the Gemini API, validates them, persists non-duplicate projects,
-     * and scores them via the existing {@link RecommendationEngineService}.
+     * scores them via the existing {@link RecommendationEngineService}, and
+     * records history.
      *
      * @param usernameOrEmail Principal name from the Security Context
      * @param requestedCount  Number of ideas to request (capped at max-generate-count)
@@ -153,7 +192,10 @@ public class AiProjectGeneratorService {
         List<AssessmentResult> assessmentResults =
                 assessmentResultRepository.findByStudentProfileIdOrderByCreatedAtDesc(profile.getId());
 
-        // ── 5. Check Gemini configuration ───────────────────────────────────
+        // ── 5. Fetch prior generated projects to prevent duplicates on repeated requests ─
+        List<Project> priorProjects = projectRepository.findByStudentProfileId(profile.getId());
+
+        // ── 6. Check Gemini configuration ───────────────────────────────────
         if (!isGeminiConfigured()) {
             log.warn("Gemini API key not configured; generate-fresh requires GEMINI_API_KEY environment variable.");
             response.setMessage("Gemini API key is not configured on the server. " +
@@ -165,10 +207,10 @@ public class AiProjectGeneratorService {
             return response;
         }
 
-        // ── 6. Call Gemini API ──────────────────────────────────────────────
+        // ── 7. Call Gemini API ──────────────────────────────────────────────
         List<Map<String, Object>> rawIdeas;
         try {
-            String prompt = buildPrompt(profile, assessmentResults, clampedCount);
+            String prompt = buildPrompt(profile, assessmentResults, priorProjects, clampedCount);
             String geminiJson = callGeminiApi(prompt);
             rawIdeas = parseGeminiOutput(geminiJson);
         } catch (GeminiQuotaException e) {
@@ -214,11 +256,11 @@ public class AiProjectGeneratorService {
         response.setGeminiContributed(true);
         response.setGeneratedCount(rawIdeas.size());
 
-        // ── 7. Validate, de-duplicate, and persist ──────────────────────────
+        // ── 8. Validate, de-duplicate, and persist ──────────────────────────
         List<Project> savedProjects = persistValidatedIdeas(rawIdeas, profile);
         response.setSavedCount(savedProjects.size());
 
-        // ── 8. Score with the existing recommendation engine (unmodified) ───
+        // ── 9. Score with the existing recommendation engine (unmodified) ───
         List<ProjectRecommendationResponse> scoredResponses = new ArrayList<>();
         Map<Long, AssessmentResult> latestSkillAssessments = buildLatestSkillAssessments(assessmentResults);
         Map<Long, StudentSkill> declaredSkills = buildDeclaredSkillsMap(profile);
@@ -254,29 +296,138 @@ public class AiProjectGeneratorService {
 
         response.setRecommendations(scoredResponses);
 
-        if (scoredResponses.isEmpty()) {
-            response.setMessage("Gemini returned " + rawIdeas.size() + " idea(s), but all had duplicate titles " +
-                    "in the project database. Please try generating again.");
+        // ── 10. Record in recommendation history ─────────────────────────────
+        if (historyRepository != null) {
+            for (ProjectRecommendationResponse scored : scoredResponses) {
+                Project savedProj = savedProjects.stream()
+                        .filter(p -> p.getId() != null && p.getId().equals(scored.getProjectId()))
+                        .findFirst().orElse(null);
+                if (savedProj != null) {
+                    try {
+                        historyRepository.save(new StudentRecommendationHistory(
+                                profile, savedProj, scored.getMatchScore(), scored.getRankOrder()));
+                    } catch (Exception e) {
+                        log.warn("Failed to record recommendation history for project {}: {}", savedProj.getId(), e.getMessage());
+                    }
+                }
+            }
+        }
+
+        // ── 11. Update active student recommendations ────────────────────────
+        if (recommendationRepository != null && !scoredResponses.isEmpty()) {
+            try {
+                recommendationRepository.deleteByStudentProfileId(profile.getId());
+                for (ProjectRecommendationResponse scored : scoredResponses) {
+                    Project p = savedProjects.stream()
+                            .filter(proj -> proj.getId() != null && proj.getId().equals(scored.getProjectId()))
+                            .findFirst().orElse(null);
+                    if (p != null) {
+                        StudentProjectRecommendation spr = new StudentProjectRecommendation();
+                        spr.setStudentProfile(profile);
+                        spr.setProject(p);
+                        spr.setMatchScore(scored.getMatchScore());
+                        spr.setRankOrder(scored.getRankOrder());
+                        ScoreBreakdownDto sb = scored.getScoreBreakdown();
+                        if (sb != null) {
+                            spr.setDomainFitScore(sb.getDomainFitScore());
+                            spr.setTechFitScore(sb.getTechFitScore());
+                            spr.setSkillFitScore(sb.getSkillFitScore());
+                            spr.setProficiencyScore(sb.getProficiencyScore());
+                            spr.setExperienceFitScore(sb.getExperienceFitScore());
+                            spr.setTeamFitScore(sb.getTeamFitScore());
+                            spr.setTimeFitScore(sb.getTimeFitScore());
+                            spr.setPenaltyScore(sb.getPenaltyScore());
+                        }
+                        spr.setScoreExplanation(scored.getScoreExplanation());
+                        if (scored.getRecommendationReasons() != null) {
+                            spr.setRecommendationReasons(String.join("\n", scored.getRecommendationReasons()));
+                        }
+                        if (scored.getIdentifiedGaps() != null) {
+                            spr.setIdentifiedGaps(String.join("\n", scored.getIdentifiedGaps()));
+                        }
+                        recommendationRepository.save(spr);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to update active student recommendations: {}", e.getMessage());
+            }
+        }
+
+        // ── 12. Assemble honest status message ───────────────────────────────
+        if (savedProjects.isEmpty()) {
+            response.setMessage(String.format(
+                    "Gemini returned %d idea%s, but all had duplicate titles matching existing projects. Please try generating again.",
+                    rawIdeas.size(), rawIdeas.size() == 1 ? "" : "s"));
+        } else if (savedProjects.size() < clampedCount) {
+            response.setMessage(String.format(
+                    "Generated %d project ideas (%d new project%s saved, %d duplicate title%s skipped), scored by your academic profile.",
+                    rawIdeas.size(), savedProjects.size(), savedProjects.size() == 1 ? "" : "s",
+                    rawIdeas.size() - savedProjects.size(), (rawIdeas.size() - savedProjects.size()) == 1 ? "" : "s"));
         } else {
             response.setMessage(String.format(
                     "Successfully generated %d fresh industry-level project idea%s, scored by your academic profile.",
-                    scoredResponses.size(), scoredResponses.size() == 1 ? "" : "s"));
+                    savedProjects.size(), savedProjects.size() == 1 ? "" : "s"));
         }
 
         return response;
     }
 
+    /**
+     * Retrieve the saved recommendation history for a student in descending chronological order.
+     */
+    @Transactional(readOnly = true)
+    public List<RecommendationHistoryDto> getGenerationHistoryForUser(String usernameOrEmail) {
+        User user = userRepository.findByEmail(usernameOrEmail)
+                .or(() -> userRepository.findByUsername(usernameOrEmail))
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + usernameOrEmail));
+
+        StudentProfile profile = studentProfileRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new BadRequestException("Student profile not found."));
+
+        if (historyRepository == null) {
+            return Collections.emptyList();
+        }
+
+        List<StudentRecommendationHistory> historyRecords =
+                historyRepository.findByStudentProfileIdOrderByRecommendedAtDesc(profile.getId());
+
+        List<RecommendationHistoryDto> dtos = new ArrayList<>();
+        for (StudentRecommendationHistory h : historyRecords) {
+            Project p = h.getProject();
+            if (p != null) {
+                String domainName = p.getDomain() != null ? p.getDomain().getName() : null;
+                boolean isGen = (p.getIsCatalog() != null && !p.getIsCatalog());
+                dtos.add(new RecommendationHistoryDto(
+                        h.getId(),
+                        p.getId(),
+                        p.getTitle(),
+                        h.getMatchScore(),
+                        h.getRankOrder(),
+                        h.getRecommendedAt(),
+                        p.getComplexityLevel(),
+                        domainName,
+                        p.getProblemStatement(),
+                        p.getIndustryValue(),
+                        isGen
+                ));
+            }
+        }
+        return dtos;
+    }
+
     // ─── Prompt Builder ───────────────────────────────────────────────────────
 
     /**
-     * Constructs the Gemini prompt using all four student input groups:
+     * Constructs the Gemini prompt using all four student input groups and previously generated projects:
      * 1. Engineering branch and academic level
      * 2. Primary technology stack
      * 3. Declared skills and proficiency levels
      * 4. Actual assessment quiz results in original chronological order
+     * 5. Prior project ideas to prevent duplicate titles/topics
      */
     private String buildPrompt(StudentProfile profile,
                                 List<AssessmentResult> assessmentResults,
+                                List<Project> priorProjects,
                                 int count) {
         StringBuilder sb = new StringBuilder();
         sb.append("You are an expert academic project advisor and industry engineering architect. ");
@@ -354,6 +505,19 @@ public class AiProjectGeneratorService {
             sb.append("Available Timeline: ").append(profile.getAvailableTimeWeeks()).append(" weeks\n");
         }
 
+        // Prior Ideas to Avoid Duplication
+        if (priorProjects != null && !priorProjects.isEmpty()) {
+            sb.append("\n=== PREVIOUSLY GENERATED / EXISTING PROJECTS (DO NOT REPEAT) ===\n");
+            sb.append("The student has already received the following project ideas. ");
+            sb.append("You MUST propose completely distinct, non-duplicate ideas that explore new problems and technologies:\n");
+            for (Project prior : priorProjects) {
+                if (prior.getTitle() != null && !prior.getTitle().isBlank()) {
+                    sb.append("  - ").append(prior.getTitle().trim()).append("\n");
+                }
+            }
+            sb.append("DO NOT repeat, clone, or create minor variations of any existing project titles listed above.\n");
+        }
+
         sb.append("\n=== INSTRUCTIONS & JSON SCHEMA ===\n");
         sb.append("Generate EXACTLY ").append(count).append(" project idea").append(count > 1 ? "s" : "");
         sb.append(". Return ONLY a valid JSON array (no markdown code blocks, no preamble, no commentary). ");
@@ -393,7 +557,7 @@ public class AiProjectGeneratorService {
     // ─── Gemini HTTP Client ───────────────────────────────────────────────────
 
     /**
-     * Calls the Gemini REST API using Java's built-in HttpClient.
+     * Calls the Gemini REST API using Java's built-in HttpClient with bounded retries for transient failures.
      * The API key is sent exclusively in the {@code x-goog-api-key} header.
      * The URL and log entries NEVER contain API credentials.
      */
@@ -421,55 +585,75 @@ public class AiProjectGeneratorService {
             throw new GeminiProviderException("Failed to serialize Gemini request payload: " + e.getMessage());
         }
 
-        try {
-            HttpClient client = HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofSeconds(timeoutSeconds))
-                    .build();
+        int maxAttempts = 2;
+        Exception lastException = null;
 
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .header("Content-Type", "application/json")
-                    .header("x-goog-api-key", apiKey)
-                    .timeout(Duration.ofSeconds(timeoutSeconds))
-                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                    .build();
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                HttpClient client = HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofSeconds(timeoutSeconds))
+                        .build();
 
-            HttpResponse<String> httpResponse = client.send(request, HttpResponse.BodyHandlers.ofString());
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .header("Content-Type", "application/json")
+                        .header("x-goog-api-key", apiKey)
+                        .timeout(Duration.ofSeconds(timeoutSeconds))
+                        .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                        .build();
 
-            int statusCode = httpResponse.statusCode();
-            String responseBody = httpResponse.body() != null ? httpResponse.body() : "";
+                HttpResponse<String> httpResponse = client.send(request, HttpResponse.BodyHandlers.ofString());
 
-            if (statusCode == 429) {
-                String errorMsg = extractErrorMessage(responseBody, "Gemini API rate limit or quota exceeded");
-                log.warn("Gemini API quota exceeded (HTTP 429). Model: '{}'. Safe detail: {}", geminiModel, sanitize(errorMsg, apiKey));
-                throw new GeminiQuotaException("Gemini API quota exceeded (HTTP 429): " + sanitize(errorMsg, apiKey));
+                int statusCode = httpResponse.statusCode();
+                String responseBody = httpResponse.body() != null ? httpResponse.body() : "";
+
+                if (statusCode == 429) {
+                    String errorMsg = extractErrorMessage(responseBody, "Gemini API rate limit or quota exceeded");
+                    log.warn("Gemini API quota exceeded (HTTP 429). Model: '{}'. Safe detail: {}", geminiModel, sanitize(errorMsg, apiKey));
+                    throw new GeminiQuotaException("Gemini API quota exceeded (HTTP 429): " + sanitize(errorMsg, apiKey));
+                }
+
+                // Eligible transient server errors for bounded retry
+                if ((statusCode == 500 || statusCode == 502 || statusCode == 503 || statusCode == 504) && attempt < maxAttempts) {
+                    log.warn("Gemini returned transient status {} on attempt {}. Retrying once...", statusCode, attempt);
+                    try { Thread.sleep(1500); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                    continue;
+                }
+
+                if (statusCode < 200 || statusCode >= 300) {
+                    String errorMsg = extractErrorMessage(responseBody, "HTTP " + statusCode);
+                    log.error("Gemini API call failed. Status: {}, Model: '{}', Safe detail: {}", statusCode, geminiModel, sanitize(errorMsg, apiKey));
+                    throw new GeminiProviderException(String.format("Gemini API returned HTTP %d: %s", statusCode, sanitize(errorMsg, apiKey)));
+                }
+
+                if (responseBody.isBlank()) {
+                    throw new GeminiProviderException("Gemini API returned an empty response body (HTTP 200).");
+                }
+
+                return responseBody;
+
+            } catch (GeminiQuotaException | GeminiProviderException e) {
+                throw e;
+            } catch (java.net.http.HttpTimeoutException e) {
+                log.warn("Gemini request timed out after {}s for model '{}'", timeoutSeconds, geminiModel);
+                throw new GeminiTimeoutException("Gemini API timed out after " + timeoutSeconds + "s");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new GeminiTimeoutException("Gemini API request was interrupted");
+            } catch (Exception e) {
+                lastException = e;
+                if (attempt < maxAttempts) {
+                    log.warn("Gemini request failed on attempt {} ({}). Retrying...", attempt, e.getClass().getSimpleName());
+                    try { Thread.sleep(1500); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                    continue;
+                }
+                String safeMsg = sanitize(e.getMessage(), apiKey);
+                log.error("Gemini API connection error: {}", safeMsg);
+                throw new GeminiProviderException("Gemini API connection error: " + safeMsg);
             }
-
-            if (statusCode < 200 || statusCode >= 300) {
-                String errorMsg = extractErrorMessage(responseBody, "HTTP " + statusCode);
-                log.error("Gemini API call failed. Status: {}, Model: '{}', Safe detail: {}", statusCode, geminiModel, sanitize(errorMsg, apiKey));
-                throw new GeminiProviderException(String.format("Gemini API returned HTTP %d: %s", statusCode, sanitize(errorMsg, apiKey)));
-            }
-
-            if (responseBody.isBlank()) {
-                throw new GeminiProviderException("Gemini API returned an empty response body (HTTP 200).");
-            }
-
-            return responseBody;
-
-        } catch (GeminiQuotaException | GeminiProviderException e) {
-            throw e;
-        } catch (java.net.http.HttpTimeoutException e) {
-            log.warn("Gemini request timed out after {}s for model '{}'", timeoutSeconds, geminiModel);
-            throw new GeminiTimeoutException("Gemini API timed out after " + timeoutSeconds + "s");
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new GeminiTimeoutException("Gemini API request was interrupted");
-        } catch (Exception e) {
-            String safeMsg = sanitize(e.getMessage(), apiKey);
-            log.error("Gemini API connection error: {}", safeMsg);
-            throw new GeminiProviderException("Gemini API connection error: " + safeMsg);
         }
+
+        throw new GeminiProviderException("Gemini API call failed after retries: " + (lastException != null ? lastException.getMessage() : "unknown"));
     }
 
     // ─── Response Parser and Validator ───────────────────────────────────────
@@ -592,24 +776,33 @@ public class AiProjectGeneratorService {
     /**
      * Maps validated Gemini ideas to {@link Project} entities, resolves and links
      * technologies and skills, and saves them within the current {@code @Transactional} boundary.
-     * Duplicate titles (case-insensitive) are safely skipped. Catalog projects are untouched.
+     * Duplicate titles (case-insensitive and intra-batch) are safely skipped. Catalog projects are untouched.
      */
     private List<Project> persistValidatedIdeas(List<Map<String, Object>> ideas, StudentProfile profile) {
         List<Project> saved = new ArrayList<>();
+        Set<String> seenTitlesInBatch = new HashSet<>();
 
         for (Map<String, Object> idea : ideas) {
             String title = getString(idea, "title");
             if (title == null || title.isBlank()) continue;
+            String trimmedTitle = title.trim();
+            String lowerTitle = trimmedTitle.toLowerCase();
+
+            // Intra-batch duplicate check
+            if (!seenTitlesInBatch.add(lowerTitle)) {
+                log.info("Skipping intra-batch duplicate project title: '{}'", trimmedTitle);
+                continue;
+            }
 
             // Case-insensitive duplicate check before inserting
-            if (projectRepository.existsByTitleIgnoreCase(title.trim())) {
-                log.info("Skipping duplicate project title (case-insensitive match): '{}'", title);
+            if (projectRepository.existsByTitleIgnoreCase(trimmedTitle)) {
+                log.info("Skipping duplicate project title (case-insensitive match): '{}'", trimmedTitle);
                 continue;
             }
 
             try {
                 Project project = new Project();
-                project.setTitle(title.trim());
+                project.setTitle(trimmedTitle);
                 project.setIsCatalog(false);           // Generated idea, not pre-seeded catalog
                 project.setStudentProfile(profile);
                 project.setQualityApproved(true);

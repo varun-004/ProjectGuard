@@ -74,4 +74,16 @@ public class RecommendationController {
                 aiProjectGeneratorService.generateForUser(username, count);
         return ResponseEntity.ok(response);
     }
+
+    /**
+     * Retrieve the saved recommendation and generation history for the authenticated student.
+     */
+    @GetMapping("/history")
+    public ResponseEntity<java.util.List<com.projectguard.dto.recommendation.RecommendationHistoryDto>> getRecommendationHistory(
+            Authentication authentication) {
+        String username = authentication.getName();
+        java.util.List<com.projectguard.dto.recommendation.RecommendationHistoryDto> history =
+                aiProjectGeneratorService.getGenerationHistoryForUser(username);
+        return ResponseEntity.ok(history);
+    }
 }

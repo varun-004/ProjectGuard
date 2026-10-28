@@ -48,6 +48,12 @@ class AiProjectGeneratorServiceTest {
     @Mock
     private RecommendationEngineService recommendationEngineService;
 
+    @Mock
+    private StudentRecommendationHistoryRepository historyRepository;
+
+    @Mock
+    private StudentProjectRecommendationRepository recommendationRepository;
+
     private AiProjectGeneratorService service;
 
     private User testUser;
@@ -67,7 +73,9 @@ class AiProjectGeneratorServiceTest {
                 skillRepository,
                 technologyRepository,
                 branchRepository,
-                recommendationEngineService
+                recommendationEngineService,
+                historyRepository,
+                recommendationRepository
         );
 
         ReflectionTestUtils.setField(service, "geminiApiKey", "test-api-key-12345");
@@ -413,5 +421,108 @@ class AiProjectGeneratorServiceTest {
         assertTrue(lowScored.getScoreBreakdown().getSkillFitScore() < 10.0, "Low assessed skill should get reduced skill fit (<10.0)");
         assertTrue(highScored.getScoreBreakdown().getProficiencyScore() > lowScored.getScoreBreakdown().getProficiencyScore(),
                 "Assessed mastery score must be higher for ADVANCED than BEGINNER");
+    }
+
+    @Test
+    @DisplayName("generateForUser should support each project count from 1 to 5")
+    void testGenerateForUser_SupportedCounts1To5() {
+        when(userRepository.findByEmail(testUser.getEmail())).thenReturn(Optional.of(testUser));
+        when(studentProfileRepository.findByUserId(testUser.getId())).thenReturn(Optional.of(testProfile));
+        when(assessmentResultRepository.findByStudentProfileIdOrderByCreatedAtDesc(testProfile.getId()))
+                .thenReturn(Collections.emptyList());
+
+        ReflectionTestUtils.setField(service, "geminiApiKey", "");
+
+        for (int c = 1; c <= 5; c++) {
+            GenerateFreshProjectsResponse resp = service.generateForUser(testUser.getEmail(), c);
+            assertEquals(c, resp.getRequestedCount(), "Requested count " + c + " should be preserved");
+        }
+    }
+
+    @Test
+    @DisplayName("generateForUser should record recommendation history and update active recommendations")
+    void testGenerateForUser_RecordsHistoryAndUpdatesActiveRecommendations() {
+        when(userRepository.findByEmail(testUser.getEmail())).thenReturn(Optional.of(testUser));
+        when(studentProfileRepository.findByUserId(testUser.getId())).thenReturn(Optional.of(testProfile));
+        when(assessmentResultRepository.findByStudentProfileIdOrderByCreatedAtDesc(testProfile.getId()))
+                .thenReturn(Collections.emptyList());
+        when(projectRepository.findByStudentProfileId(testProfile.getId())).thenReturn(Collections.emptyList());
+
+        when(branchRepository.findAll()).thenReturn(List.of(testBranch));
+        when(technologyRepository.findAll()).thenReturn(List.of(testTech));
+        when(skillRepository.findAll()).thenReturn(List.of(testSkill));
+        when(projectRepository.existsByTitleIgnoreCase(anyString())).thenReturn(false);
+
+        when(projectRepository.save(any(Project.class))).thenAnswer(inv -> {
+            Project p = inv.getArgument(0);
+            if (p.getId() == null) p.setId(888L);
+            return p;
+        });
+
+        ProjectRecommendationResponse scored = new ProjectRecommendationResponse();
+        scored.setProjectId(888L);
+        scored.setTitle("History Tracked Project");
+        scored.setMatchScore(91.0);
+        scored.setRankOrder(1);
+        when(recommendationEngineService.scoreProject(any(Project.class), eq(testProfile), anyMap(), anyMap()))
+                .thenReturn(scored);
+
+        AiProjectGeneratorService spyService = spy(service);
+        String mockGeminiJson = """
+                {
+                  "candidates": [
+                    {
+                      "content": {
+                        "parts": [
+                          {
+                            "text": "[{\\"title\\": \\"History Tracked Project\\", \\"problemStatement\\": \\"Problem X\\", \\"proposedSolution\\": \\"Solution Y\\"}]"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+                """;
+        doReturn(mockGeminiJson).when(spyService).callGeminiApi(anyString());
+
+        GenerateFreshProjectsResponse response = spyService.generateForUser(testUser.getEmail(), 1);
+
+        assertNotNull(response);
+        assertEquals(1, response.getSavedCount());
+        // Verify history repository save was called
+        verify(historyRepository, times(1)).save(any(StudentRecommendationHistory.class));
+        // Verify active recommendation repository delete and save were called
+        verify(recommendationRepository, times(1)).deleteByStudentProfileId(testProfile.getId());
+        verify(recommendationRepository, times(1)).save(any(StudentProjectRecommendation.class));
+    }
+
+    @Test
+    @DisplayName("getGenerationHistoryForUser should return list of past recommendations")
+    void testGetGenerationHistoryForUser_ReturnsList() {
+        when(userRepository.findByEmail(testUser.getEmail())).thenReturn(Optional.of(testUser));
+        when(studentProfileRepository.findByUserId(testUser.getId())).thenReturn(Optional.of(testProfile));
+
+        Project p = new Project();
+        p.setId(777L);
+        p.setTitle("Prior Sepsis Alert");
+        p.setIsCatalog(false);
+        p.setComplexityLevel("INTERMEDIATE");
+        p.setDomain(testDomain);
+        p.setProblemStatement("ICU clinical deterioration.");
+
+        StudentRecommendationHistory hist = new StudentRecommendationHistory(testProfile, p, 84.5, 1);
+        hist.setId(101L);
+
+        when(historyRepository.findByStudentProfileIdOrderByRecommendedAtDesc(testProfile.getId()))
+                .thenReturn(List.of(hist));
+
+        List<com.projectguard.dto.recommendation.RecommendationHistoryDto> history =
+                service.getGenerationHistoryForUser(testUser.getEmail());
+
+        assertNotNull(history);
+        assertEquals(1, history.size());
+        assertEquals("Prior Sepsis Alert", history.getFirst().getProjectTitle());
+        assertEquals(84.5, history.getFirst().getMatchScore());
+        assertTrue(history.getFirst().isGeneratedIdea());
     }
 }

@@ -110,9 +110,16 @@ public class ProjectIdeaGeneratorService {
                 continue;
             }
 
-            // 4. Check for duplicate titles in database
-            if (projectRepository.existsByTitle(candidate.getTitle())) {
-                continue;
+            // 4. Ensure title uniqueness in database
+            String baseTitle = candidate.getTitle();
+            if (projectRepository.existsByTitle(baseTitle)) {
+                int suffix = 2;
+                String uniqueTitle = baseTitle + " (Track " + suffix + ")";
+                while (projectRepository.existsByTitle(uniqueTitle)) {
+                    suffix++;
+                    uniqueTitle = baseTitle + " (Track " + suffix + ")";
+                }
+                candidate.setTitle(uniqueTitle);
             }
 
             candidate.setQualityApproved(true);
