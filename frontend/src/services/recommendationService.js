@@ -23,7 +23,14 @@ const recommendationService = {
      * @param {number} count - Number of ideas to generate (1–5, default 3)
      */
     generateFresh: async (count = 3) => {
-        return api.post('/recommendations/generate-fresh', { count });
+        return api.post('/recommendations/generate-fresh', { count }, { timeout: 70000 });
+    },
+
+    /**
+     * Fetch saved recommendation and generation history for the authenticated student.
+     */
+    getHistory: async () => {
+        return api.get('/recommendations/history');
     }
 };
 

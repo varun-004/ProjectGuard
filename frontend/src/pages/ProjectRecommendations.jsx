@@ -36,7 +36,7 @@ const levelBadgeColor = (level) => {
     }
 };
 
-// ─── Project Detail Modal ─────────────────────────────────────────────────────
+// ─── Project Detail Dossier Modal ─────────────────────────────────────────────
 
 const ProjectDetailModal = ({ project, onClose }) => {
     if (!project) return null;
@@ -63,7 +63,7 @@ const ProjectDetailModal = ({ project, onClose }) => {
                             )}
                             {project.isGeneratedIdea && (
                                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-400/20 text-purple-200 border border-purple-400/30">
-                                    💡 AI Synthesized
+                                    💡 AI Generated
                                 </span>
                             )}
                             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
@@ -290,33 +290,6 @@ const ProjectDetailModal = ({ project, onClose }) => {
                         </div>
                     )}
 
-                    {/* Section 7: Assessed Skills Match Breakdown */}
-                    {project.assessedSkillsMatch && project.assessedSkillsMatch.length > 0 && (
-                        <div className="pt-4 space-y-3">
-                            <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                                <span>🎯</span> Required Skills vs. Your Assessed Competencies
-                            </h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                                {project.assessedSkillsMatch.map((sm, idx) => (
-                                    <div key={idx} className="flex items-center justify-between p-3 rounded-xl border bg-gray-50 border-gray-200">
-                                        <div>
-                                            <p className="font-semibold text-gray-900">{sm.skillName}</p>
-                                            <p className="text-[11px] text-gray-500 mt-0.5">{sm.note}</p>
-                                        </div>
-                                        <div className="text-right shrink-0 ml-2">
-                                            <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${levelBadgeColor(sm.assessedLevel)}`}>
-                                                {sm.assessedLevel}
-                                            </span>
-                                            {sm.isAssessed && (
-                                                <p className="text-[11px] font-bold text-gray-700 mt-0.5">{sm.assessedPercentage}%</p>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
                     {/* Section 7: Constraints & Metadata */}
                     <div className="pt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs">
                         <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
@@ -355,14 +328,143 @@ const ProjectDetailModal = ({ project, onClose }) => {
     );
 };
 
-// ─── Main Recommendations Component ──────────────────────────────────────────
+// ─── Generation History Modal ─────────────────────────────────────────────────
+
+const GenerationHistoryModal = ({ isOpen, onClose, onSelectProjectId }) => {
+    const [history, setHistory] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        setLoading(true);
+        setError(null);
+        recommendationService.getHistory()
+            .then(res => {
+                setHistory(res.data || []);
+            })
+            .catch(err => {
+                console.error('Failed to load history:', err);
+                setError('Unable to load saved generation history.');
+            })
+            .finally(() => setLoading(false));
+    }, [isOpen]);
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-fadeIn">
+            <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-gray-100 overflow-hidden">
+                <div className="px-6 py-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <span className="text-lg">📜</span>
+                        <h2 className="text-lg font-bold text-white">Saved Recommendation & Generation History</h2>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="text-gray-400 hover:text-white p-1 rounded-lg"
+                        aria-label="Close modal"
+                    >
+                        ✕
+                    </button>
+                </div>
+
+                <div className="overflow-y-auto p-6 space-y-3">
+                    {loading && (
+                        <div className="space-y-2">
+                            {[1, 2, 3].map(n => (
+                                <div key={n} className="h-16 bg-gray-100 rounded-xl animate-pulse" />
+                            ))}
+                        </div>
+                    )}
+
+                    {!loading && error && (
+                        <div className="p-4 bg-rose-50 text-rose-700 rounded-xl text-xs">{error}</div>
+                    )}
+
+                    {!loading && !error && history.length === 0 && (
+                        <div className="text-center py-10 text-gray-500 text-sm">
+                            <span className="text-3xl block mb-2">📂</span>
+                            No saved generation history found yet.
+                        </div>
+                    )}
+
+                    {!loading && !error && history.map((item) => (
+                        <div
+                            key={item.id}
+                            className="p-4 rounded-xl border border-gray-100 bg-gray-50 hover:bg-indigo-50/50 hover:border-indigo-200 transition-all flex items-start justify-between gap-4"
+                        >
+                            <div className="space-y-1 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-800">
+                                        Rank #{item.rankOrder}
+                                    </span>
+                                    {item.generatedIdea && (
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-200">
+                                            ✨ AI Generated
+                                        </span>
+                                    )}
+                                    {item.complexityLevel && (
+                                        <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-gray-200/80 text-gray-700">
+                                            {item.complexityLevel}
+                                        </span>
+                                    )}
+                                    {item.domainName && (
+                                        <span className="text-[10px] font-medium text-gray-500">
+                                            {item.domainName}
+                                        </span>
+                                    )}
+                                </div>
+                                <h3 className="text-sm font-bold text-gray-900 leading-snug">
+                                    {item.projectTitle}
+                                </h3>
+                                <p className="text-[11px] text-gray-400">
+                                    Recommended: {item.recommendedAt}
+                                </p>
+                            </div>
+
+                            <div className="flex flex-col items-end gap-2 shrink-0">
+                                <div className="flex items-center gap-1">
+                                    <span className="text-xs text-gray-500 font-semibold">Match:</span>
+                                    <span className="text-sm font-black text-indigo-700">
+                                        {Math.round(item.matchScore)}%
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        onSelectProjectId(item.projectId);
+                                        onClose();
+                                    }}
+                                    className="px-3 py-1 text-xs font-semibold bg-gray-900 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+                                >
+                                    View Dossier →
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 flex justify-end">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 text-xs font-semibold bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl transition-colors"
+                    >
+                        Close History
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ─── Main Unified Recommendations Component ──────────────────────────────────
 
 const ProjectRecommendations = () => {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState(null);
     const [selectedProject, setSelectedProject] = useState(null);
+    const [showHistoryModal, setShowHistoryModal] = useState(false);
 
     // Filters and sorting
     const [searchTerm, setSearchTerm] = useState('');
@@ -373,12 +475,10 @@ const ProjectRecommendations = () => {
     // ── Generate Fresh (Gemini) state ────────────────────────────────────────
     const [generateCount, setGenerateCount] = useState(3);
     const [generating, setGenerating] = useState(false);
-    const [generateResult, setGenerateResult] = useState(null);
-    const [generateError, setGenerateError] = useState(null);
+    const [generationStatus, setGenerationStatus] = useState(null);
 
     const fetchRecommendations = async (forceRefresh = false) => {
-        if (forceRefresh) setRefreshing(true);
-        else setLoading(true);
+        setLoading(true);
         setError(null);
 
         try {
@@ -391,7 +491,6 @@ const ProjectRecommendations = () => {
             setError(msg);
         } finally {
             setLoading(false);
-            setRefreshing(false);
         }
     };
 
@@ -400,21 +499,77 @@ const ProjectRecommendations = () => {
     }, []);
 
     const handleGenerateFresh = async () => {
-        if (generating) return; // prevent duplicate in-flight submissions
+        if (generating) return; // Prevent duplicate in-flight requests
         setGenerating(true);
-        setGenerateResult(null);
-        setGenerateError(null);
+        setGenerationStatus(null);
 
         try {
             const res = await recommendationService.generateFresh(generateCount);
-            setGenerateResult(res.data);
+            const freshData = res.data;
+
+            if (freshData.geminiContributed && freshData.recommendations?.length > 0) {
+                // Merge freshly generated recommendations into active list
+                setData(prev => {
+                    if (!prev) return { ...freshData };
+                    const existing = prev.recommendations || [];
+                    const freshIds = new Set(freshData.recommendations.map(r => r.projectId));
+                    const filteredExisting = existing.filter(r => !freshIds.has(r.projectId));
+                    const merged = [...freshData.recommendations, ...filteredExisting];
+                    merged.forEach((item, idx) => { item.rankOrder = idx + 1; });
+                    return {
+                        ...prev,
+                        recommendations: merged,
+                        totalRecommendations: merged.length
+                    };
+                });
+
+                if (freshData.savedCount === freshData.requestedCount) {
+                    setGenerationStatus({
+                        type: 'SUCCESS',
+                        title: 'Recommendations Generated Successfully',
+                        message: freshData.message
+                    });
+                } else {
+                    setGenerationStatus({
+                        type: 'PARTIAL',
+                        title: 'Partial Generation Success',
+                        message: freshData.message
+                    });
+                }
+            } else if (freshData.geminiContributed && freshData.recommendations?.length === 0) {
+                setGenerationStatus({
+                    type: 'DUPLICATE',
+                    title: 'Duplicate Titles Encountered',
+                    message: freshData.message || 'Gemini generated ideas, but all matched existing project titles. Please try generating again.'
+                });
+            } else {
+                setGenerationStatus({
+                    type: 'ERROR',
+                    title: 'Generation Unavailable',
+                    message: freshData.message || 'Unable to generate fresh projects.',
+                    errorDetail: freshData.errorDetail
+                });
+            }
         } catch (err) {
             console.error('Error generating fresh projects:', err);
-            const msg = err.response?.data?.message || err.response?.data?.error ||
+            const msg = err.response?.data?.message || err.response?.data?.error || err.message ||
                 'Failed to generate projects. Please try again later.';
-            setGenerateError(msg);
+            setGenerationStatus({
+                type: 'ERROR',
+                title: 'Generation Request Failed',
+                message: msg
+            });
         } finally {
             setGenerating(false);
+        }
+    };
+
+    const handleSelectProjectId = async (projectId) => {
+        try {
+            const res = await recommendationService.getProjectRecommendation(projectId);
+            setSelectedProject(res.data);
+        } catch (err) {
+            console.error('Error loading project detail:', err);
         }
     };
 
@@ -450,22 +605,22 @@ const ProjectRecommendations = () => {
         });
 
     return (
-        <div className="max-w-7xl mx-auto space-y-8 pb-12">
+        <div className="max-w-7xl mx-auto space-y-6 pb-12">
 
-            {/* ─── Hero Header ──────────────────────────────────────────────── */}
+            {/* ─── Unified Hero Header ────────────────────────────────────────── */}
             <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-8 sm:p-10 text-white shadow-xl shadow-slate-950/20 border border-indigo-900/30">
                 <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
                 <div className="absolute bottom-0 left-1/4 w-80 h-80 bg-violet-600/10 rounded-full blur-3xl pointer-events-none" />
 
                 <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div className="space-y-2 max-w-2xl">
-                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                            <span>✨ Phase 6 Engine</span>
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                            <span>✨ Gemini 3.5 Flash</span>
                             <span>•</span>
                             <span>Quality Gate Verified</span>
                         </div>
                         <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
-                            Personalized Project Recommendations
+                            Personalized AI Project Recommendations
                         </h1>
                         <p className="text-indigo-200/90 text-sm sm:text-base leading-relaxed">
                             {data ? (
@@ -481,16 +636,11 @@ const ProjectRecommendations = () => {
 
                     <div className="flex items-center gap-3 shrink-0">
                         <button
-                            onClick={() => fetchRecommendations(true)}
-                            disabled={refreshing || loading}
-                            className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white shadow-lg shadow-indigo-500/25 transition-all ${
-                                refreshing ? 'opacity-70 cursor-not-allowed' : 'active:scale-95'
-                            }`}
+                            onClick={() => setShowHistoryModal(true)}
+                            className="flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10 shadow-sm transition-all active:scale-95"
                         >
-                            <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                            {refreshing ? 'Recalculating…' : 'Refresh Recommendations'}
+                            <span>📜</span>
+                            <span>Saved Generation History</span>
                         </button>
                     </div>
                 </div>
@@ -504,267 +654,131 @@ const ProjectRecommendations = () => {
                 </div>
             </div>
 
-            {/* ─── AI Configuration & Idea Synthesis Engine Status Banner ────── */}
-            {data?.aiConfigurationStatus && (
-                <div className="bg-slate-900 text-slate-200 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm flex items-start gap-3.5 text-xs">
-                    <span className="text-xl">🤖</span>
-                    <div className="flex-1 space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-bold text-white uppercase tracking-wider text-[11px]">
-                                Idea Synthesis Engine:
-                            </span>
-                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                                data.aiConfigurationStatus.includes('Live External')
-                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                    : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
-                            }`}>
-                                {data.aiConfigurationStatus.includes('Live External') ? 'Live External LLM Active' : 'Domain-Grounded Synthesizer Active'}
-                            </span>
-                        </div>
-                        <p className="text-slate-300 leading-relaxed">
-                            {data.aiConfigurationStatus}
+            {/* ─── Unified AI Generation Control Bar ──────────────────────────── */}
+            <div className="bg-gradient-to-r from-violet-950 via-slate-900 to-indigo-950 rounded-2xl p-5 sm:p-6 border border-violet-800/40 shadow-xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 text-white">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                        <span className="text-lg">✨</span>
+                        <span className="text-sm sm:text-base font-bold text-white">
+                            Fresh AI Project Generation
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                            gemini-3.5-flash
+                        </span>
+                    </div>
+                    <p className="text-xs text-violet-200/70">
+                        Generates novel, industry-grade projects tailored to your branch, technology stack, declared skills, and quiz scores. Duplicate titles are avoided.
+                    </p>
+                </div>
+
+                <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex items-center gap-2 bg-white/10 px-3 py-2 rounded-xl border border-violet-500/30">
+                        <label htmlFor="gen-count" className="text-xs font-semibold text-violet-200">
+                            Count:
+                        </label>
+                        <select
+                            id="gen-count"
+                            value={generateCount}
+                            onChange={(e) => setGenerateCount(Number(e.target.value))}
+                            disabled={generating}
+                            className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer"
+                        >
+                            {[1, 2, 3, 4, 5].map((n) => (
+                                <option key={n} value={n} className="bg-slate-900 text-white">
+                                    {n} Project{n > 1 ? 's' : ''}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <button
+                        id="btn-generate-ai"
+                        onClick={handleGenerateFresh}
+                        disabled={generating}
+                        className={`flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-all shadow-lg ${
+                            generating
+                                ? 'bg-violet-700/50 cursor-not-allowed opacity-70 text-violet-200'
+                                : 'bg-gradient-to-r from-violet-500 to-indigo-500 hover:from-violet-600 hover:to-indigo-600 active:scale-95 text-white shadow-violet-500/25'
+                        }`}
+                    >
+                        {generating ? (
+                            <>
+                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                <span>Generating…</span>
+                            </>
+                        ) : (
+                            <>
+                                <span>✨</span>
+                                <span>Generate AI Recommendations</span>
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
+
+            {/* ─── Clear Generation Status Banners ─────────────────────────────── */}
+            {generating && (
+                <div className="bg-violet-950/40 border border-violet-800/40 rounded-2xl p-5 text-violet-200 flex items-center gap-4 animate-pulse">
+                    <div className="h-5 w-5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                    <div className="space-y-0.5">
+                        <p className="text-xs font-bold text-violet-100">
+                            Generating {generateCount} personalized engineering project idea{generateCount > 1 ? 's' : ''} via Gemini 3.5 Flash…
+                        </p>
+                        <p className="text-[11px] text-violet-300/80">
+                            Synthesizing real-world problems, checking duplicates against your history, linking technologies, and computing genuine assessment match scores.
                         </p>
                     </div>
                 </div>
             )}
 
-            {/* ─── Generate Fresh Industry Projects Panel (Gemini) ───────────── */}
-            <div className="bg-gradient-to-br from-violet-950 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 border border-violet-800/40 shadow-xl shadow-violet-950/30 text-white relative overflow-hidden">
-                {/* Background glow */}
-                <div className="absolute top-0 right-0 w-64 h-64 bg-violet-500/10 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute bottom-0 left-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-
-                <div className="relative flex flex-col lg:flex-row lg:items-start gap-6">
-                    {/* Left: Description */}
-                    <div className="flex-1 space-y-3">
-                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-violet-500/20 text-violet-300 border border-violet-500/30">
-                            <span>✨</span>
-                            <span>Gemini AI · Backend-Powered</span>
-                        </div>
-                        <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight">
-                            Generate Fresh Industry Projects
-                        </h2>
-                        <p className="text-violet-200/80 text-sm leading-relaxed max-w-xl">
-                            Powered by Google Gemini on the server — your API key is never sent to the browser.
-                            Generates novel, real-world project ideas personalised to your branch, technology stack,
-                            declared skills, and quiz assessment scores.
-                        </p>
-                        <ul className="text-xs text-violet-300/70 space-y-1">
-                            <li>• Projects are saved, then scored by the existing recommendation engine</li>
-                            <li>• No generic CRUD or tutorial clones — industry-level only</li>
-                            <li>• Duplicate titles are automatically skipped</li>
-                        </ul>
-                    </div>
-
-                    {/* Right: Controls */}
-                    <div className="flex flex-col gap-4 lg:min-w-[220px]">
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-semibold text-violet-300 uppercase tracking-wider" htmlFor="generate-count">
-                                Number of Ideas
-                            </label>
-                            <select
-                                id="generate-count"
-                                value={generateCount}
-                                onChange={(e) => setGenerateCount(Number(e.target.value))}
-                                disabled={generating}
-                                className="w-full px-3 py-2 text-sm font-medium text-white bg-white/10 border border-violet-500/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-400/40 disabled:opacity-50 transition-all"
-                            >
-                                {[1, 2, 3, 4, 5].map(n => (
-                                    <option key={n} value={n} className="bg-slate-900">{n} project{n > 1 ? 's' : ''}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <button
-                            id="btn-generate-fresh"
-                            onClick={handleGenerateFresh}
-                            disabled={generating}
-                            className={`flex items-center justify-center gap-2 w-full px-5 py-3 text-sm font-bold rounded-xl transition-all shadow-lg ${
-                                generating
-                                    ? 'bg-violet-700/50 cursor-not-allowed opacity-70'
-                                    : 'bg-gradient-to-r from-violet-500 to-indigo-500 hover:from-violet-600 hover:to-indigo-600 active:scale-95 shadow-violet-500/30'
-                            } text-white`}
-                        >
-                            {generating ? (
-                                <>
-                                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg>
-                                    <span>Generating via Gemini…</span>
-                                </>
-                            ) : (
-                                <>
-                                    <span>✨</span>
-                                    <span>Generate Fresh Projects</span>
-                                </>
+            {!generating && generationStatus && (
+                <div className={`rounded-2xl p-4 sm:p-5 flex items-start justify-between gap-3 text-xs border ${
+                    generationStatus.type === 'SUCCESS' ? 'bg-emerald-950/40 border-emerald-700/50 text-emerald-200' :
+                    generationStatus.type === 'PARTIAL' ? 'bg-indigo-950/40 border-indigo-700/50 text-indigo-200' :
+                    generationStatus.type === 'DUPLICATE' ? 'bg-amber-950/40 border-amber-700/50 text-amber-200' :
+                    'bg-rose-950/40 border-rose-700/50 text-rose-200'
+                }`}>
+                    <div className="flex items-start gap-3">
+                        <span className="text-xl">
+                            {generationStatus.type === 'SUCCESS' ? '✅' :
+                             generationStatus.type === 'PARTIAL' ? 'ℹ️' :
+                             generationStatus.type === 'DUPLICATE' ? '🔁' : '⚠️'}
+                        </span>
+                        <div className="space-y-1">
+                            <p className="font-bold text-sm text-white">
+                                {generationStatus.title}
+                            </p>
+                            <p className="leading-relaxed opacity-90">
+                                {generationStatus.message}
+                            </p>
+                            {generationStatus.errorDetail && (
+                                <p className="font-mono text-[11px] opacity-75 bg-black/20 p-2 rounded-lg mt-1">
+                                    Detail: {generationStatus.errorDetail}
+                                </p>
                             )}
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        {generationStatus.type === 'ERROR' && (
+                            <button
+                                onClick={handleGenerateFresh}
+                                className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs"
+                            >
+                                Try Again
+                            </button>
+                        )}
+                        <button
+                            onClick={() => setGenerationStatus(null)}
+                            className="p-1 rounded-lg hover:bg-white/10 text-white/70 hover:text-white"
+                            aria-label="Dismiss message"
+                        >
+                            ✕
                         </button>
-
-                        <p className="text-[10px] text-violet-400/60 text-center">
-                            Max 5 per request · Requires GEMINI_API_KEY on server
-                        </p>
                     </div>
                 </div>
-
-                {/* ── Generation Result Area ───────────────────────────────── */}
-
-                {/* Loading skeleton */}
-                {generating && (
-                    <div className="mt-6 pt-5 border-t border-violet-800/40 space-y-4">
-                        <p className="text-xs text-violet-300 font-medium animate-pulse">
-                            🤖 Calling Gemini AI, validating output, and saving projects…
-                        </p>
-                        {[1, 2, 3].slice(0, generateCount).map(n => (
-                            <div key={n} className="bg-white/5 rounded-2xl p-5 border border-violet-700/30 animate-pulse space-y-3">
-                                <div className="h-5 bg-violet-300/10 rounded-md w-3/4" />
-                                <div className="h-12 bg-violet-300/10 rounded-md w-full" />
-                                <div className="flex gap-2">
-                                    <div className="h-5 bg-violet-300/10 rounded-full w-20" />
-                                    <div className="h-5 bg-violet-300/10 rounded-full w-24" />
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                {/* Error state */}
-                {!generating && generateError && (
-                    <div className="mt-6 pt-5 border-t border-violet-800/40">
-                        <div className="bg-rose-950/60 border border-rose-700/40 rounded-2xl p-5 flex items-start gap-3">
-                            <span className="text-2xl">⚠️</span>
-                            <div>
-                                <p className="text-sm font-bold text-rose-300">Generation Failed</p>
-                                <p className="text-xs text-rose-400/80 mt-1">{generateError}</p>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Success — no results (all duplicates or validation failures) */}
-                {!generating && generateResult && generateResult.recommendations?.length === 0 && (
-                    <div className="mt-6 pt-5 border-t border-violet-800/40">
-                        <div className="bg-amber-950/40 border border-amber-700/30 rounded-2xl p-5 flex items-start gap-3">
-                            <span className="text-2xl">🔁</span>
-                            <div>
-                                <p className="text-sm font-bold text-amber-300">No New Projects Saved</p>
-                                <p className="text-xs text-amber-400/80 mt-1">{generateResult.message}</p>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Success — project cards */}
-                {!generating && generateResult && generateResult.recommendations?.length > 0 && (
-                    <div className="mt-6 pt-5 border-t border-violet-800/40 space-y-4">
-                        <div className="flex items-center justify-between">
-                            <p className="text-sm font-bold text-violet-200">
-                                ✅ {generateResult.message}
-                            </p>
-                            <span className="text-xs text-violet-400/60">
-                                Generated {generateResult.generatedAt}
-                            </span>
-                        </div>
-
-                        {generateResult.recommendations.map((item) => (
-                            <div
-                                key={item.projectId}
-                                className="bg-white/5 backdrop-blur-sm rounded-2xl border border-violet-700/30 hover:border-violet-500/50 p-5 space-y-3 transition-all"
-                            >
-                                {/* Header */}
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="space-y-1 flex-1">
-                                        <div className="flex flex-wrap gap-1.5">
-                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30">
-                                                ✨ AI Generated
-                                            </span>
-                                            {item.complexityLevel && (
-                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white/10 text-white/70">
-                                                    {item.complexityLevel}
-                                                </span>
-                                            )}
-                                            {item.domainName && (
-                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-indigo-500/20 text-indigo-300">
-                                                    {item.domainName}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <h3 className="text-base font-bold text-white leading-snug">
-                                            {item.title}
-                                        </h3>
-                                    </div>
-                                    {/* Match score badge */}
-                                    <div className="flex flex-col items-center shrink-0">
-                                        <div className={`flex flex-col items-center justify-center h-16 w-16 rounded-full bg-gradient-to-tr ${
-                                            item.matchScore >= 65 ? 'from-emerald-500 to-teal-600' :
-                                            item.matchScore >= 40 ? 'from-amber-500 to-orange-600' :
-                                            'from-slate-600 to-slate-700'
-                                        } text-white shadow-md`}>
-                                            <span className="text-xl font-black leading-none">{Math.round(item.matchScore)}%</span>
-                                            <span className="text-[9px] font-bold uppercase opacity-80">Match</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Problem statement */}
-                                {item.problemStatement && (
-                                    <div className="bg-white/5 rounded-xl p-3 text-xs text-violet-100/80 leading-relaxed">
-                                        <strong className="text-violet-200 block mb-1">🚨 Problem:</strong>
-                                        <p className="line-clamp-2">{item.problemStatement}</p>
-                                    </div>
-                                )}
-
-                                {/* Proposed solution */}
-                                {item.proposedSolution && (
-                                    <div className="text-xs text-violet-200/70 bg-white/5 rounded-xl p-3 leading-relaxed">
-                                        <strong className="text-violet-200 block mb-1">⚙️ Solution:</strong>
-                                        <p className="line-clamp-2">{item.proposedSolution}</p>
-                                    </div>
-                                )}
-
-                                {/* MVP scope */}
-                                {item.functionalRequirements && (
-                                    <div className="text-xs text-emerald-300/70 bg-emerald-900/10 rounded-xl p-2.5 leading-relaxed">
-                                        <strong className="text-emerald-300 block mb-0.5">📦 MVP Scope:</strong>
-                                        <p className="line-clamp-1">{item.functionalRequirements}</p>
-                                    </div>
-                                )}
-
-                                {/* Evaluation metrics */}
-                                {item.expectedOutcomeKpis && (
-                                    <div className="text-xs text-blue-300/70 flex items-start gap-2">
-                                        <span className="text-blue-400 font-bold shrink-0">🎯 KPIs:</span>
-                                        <p className="line-clamp-1">{item.expectedOutcomeKpis}</p>
-                                    </div>
-                                )}
-
-                                {/* Skills & Technologies */}
-                                <div className="flex flex-wrap gap-1.5 pt-1">
-                                    {item.technologies?.slice(0, 4).map((t, i) => (
-                                        <span key={i} className="text-[10px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/20 px-2 py-0.5 rounded">
-                                            {t}
-                                        </span>
-                                    ))}
-                                    {item.requiredSkills?.slice(0, 3).map((s, i) => (
-                                        <span key={i} className="text-[10px] font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/20 px-2 py-0.5 rounded">
-                                            {s}
-                                        </span>
-                                    ))}
-                                </div>
-
-                                {/* View full dossier */}
-                                <div className="flex justify-end pt-1">
-                                    <button
-                                        onClick={() => setSelectedProject(item)}
-                                        className="px-4 py-1.5 text-xs font-bold rounded-xl bg-violet-600 hover:bg-violet-500 text-white transition-colors"
-                                    >
-                                        View Full Dossier →
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
+            )}
 
             {/* ─── Controls: Search, Filters & Sorting ───────────────────────── */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5 flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between">
@@ -845,7 +859,7 @@ const ProjectRecommendations = () => {
             {!loading && error && (
                 <div className="bg-rose-50 border border-rose-200 rounded-2xl p-6 text-center space-y-3 shadow-sm">
                     <span className="text-3xl">⚠️</span>
-                    <h3 className="text-base font-bold text-rose-900">Unable to Generate Recommendations</h3>
+                    <h3 className="text-base font-bold text-rose-900">Unable to Load Recommendations</h3>
                     <p className="text-sm text-rose-700 max-w-lg mx-auto">{error}</p>
                     <div className="flex justify-center gap-3 pt-2">
                         <Link
@@ -885,7 +899,7 @@ const ProjectRecommendations = () => {
                 </div>
             )}
 
-            {/* ─── Recommendations Cards List ──────────────────────────────── */}
+            {/* ─── One Ranked Recommendations List ──────────────────────────── */}
             {!loading && !error && filteredList.length > 0 && (
                 <div className="space-y-6">
                     <div className="flex items-center justify-between text-xs text-gray-500 px-1">
@@ -911,7 +925,7 @@ const ProjectRecommendations = () => {
                                     )}
                                     {item.isGeneratedIdea && (
                                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
-                                            💡 AI Synthesized
+                                            💡 AI Generated
                                         </span>
                                     )}
                                 </div>
@@ -1078,6 +1092,13 @@ const ProjectRecommendations = () => {
             <ProjectDetailModal
                 project={selectedProject}
                 onClose={() => setSelectedProject(null)}
+            />
+
+            {/* ─── Generation History Modal ─────────────────────────────────── */}
+            <GenerationHistoryModal
+                isOpen={showHistoryModal}
+                onClose={() => setShowHistoryModal(false)}
+                onSelectProjectId={handleSelectProjectId}
             />
         </div>
     );
