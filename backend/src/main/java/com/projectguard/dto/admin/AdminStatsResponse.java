@@ -18,6 +18,9 @@ public class AdminStatsResponse {
     private long totalTechnologies;
     private long totalAssessmentAttempts;
     private long totalAssessmentResults;
+    private long totalMlDatasetRecords;
+    private long pendingOutcomeRecords;
+    private long trainingReadyRecords;
 
     public AdminStatsResponse() {}
 
@@ -59,4 +62,13 @@ public class AdminStatsResponse {
 
     public long getTotalAssessmentResults() { return totalAssessmentResults; }
     public void setTotalAssessmentResults(long totalAssessmentResults) { this.totalAssessmentResults = totalAssessmentResults; }
+
+    public long getTotalMlDatasetRecords() { return totalMlDatasetRecords; }
+    public void setTotalMlDatasetRecords(long totalMlDatasetRecords) { this.totalMlDatasetRecords = totalMlDatasetRecords; }
+
+    public long getPendingOutcomeRecords() { return pendingOutcomeRecords; }
+    public void setPendingOutcomeRecords(long pendingOutcomeRecords) { this.pendingOutcomeRecords = pendingOutcomeRecords; }
+
+    public long getTrainingReadyRecords() { return trainingReadyRecords; }
+    public void setTrainingReadyRecords(long trainingReadyRecords) { this.trainingReadyRecords = trainingReadyRecords; }
 }

@@ -81,6 +81,9 @@ public class AiProjectGeneratorService {
     private final StudentProjectRecommendationRepository recommendationRepository;
     private final ObjectMapper objectMapper;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private MlDatasetService mlDatasetService;
+
     @org.springframework.beans.factory.annotation.Autowired
     public AiProjectGeneratorService(
             UserRepository userRepository,
@@ -140,10 +143,6 @@ public class AiProjectGeneratorService {
     public String getResolvedApiKey() {
         if (geminiApiKey != null && !geminiApiKey.isBlank()) {
             return geminiApiKey.trim();
-        }
-        String envKey = System.getenv("GEMINI_API_KEY");
-        if (envKey != null && !envKey.isBlank()) {
-            return envKey.trim();
         }
         return null;
     }
@@ -851,6 +850,23 @@ public class AiProjectGeneratorService {
                 Project finalSaved = projectRepository.save(initialSaved);
                 saved.add(finalSaved);
                 log.info("Saved Gemini-generated project: '{}' (id={})", finalSaved.getTitle(), finalSaved.getId());
+
+                if (mlDatasetService != null) {
+                    try {
+                        mlDatasetService.recordDatasetSnapshot(
+                                profile,
+                                finalSaved,
+                                15.0,
+                                profile.getTeamSize(),
+                                null,
+                                null,
+                                null,
+                                "AI_GENERATION"
+                        );
+                    } catch (Exception mlEx) {
+                        log.warn("Non-blocking ML dataset collection error for project '{}': {}", finalSaved.getTitle(), mlEx.getMessage());
+                    }
+                }
 
             } catch (Exception e) {
                 log.error("Failed to persist Gemini project '{}': {}", getString(idea, "title"), e.getMessage());

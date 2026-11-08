@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import recommendationService from '../services/recommendationService';
+import mlDatasetService from '../services/mlDatasetService';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -40,6 +41,28 @@ const levelBadgeColor = (level) => {
 
 const ProjectDetailModal = ({ project, onClose }) => {
     if (!project) return null;
+
+    const [regHours, setRegHours] = useState(15);
+    const [isRegistering, setIsRegistering] = useState(false);
+    const [regMessage, setRegMessage] = useState('');
+    const [regError, setRegError] = useState('');
+
+    const handleRegister = async () => {
+        setIsRegistering(true);
+        setRegMessage('');
+        setRegError('');
+        try {
+            await mlDatasetService.registerProject({
+                projectId: project.projectId,
+                availableHoursPerWeek: Number(regHours)
+            });
+            setRegMessage('✓ Project successfully registered into ML dataset as pending outcome!');
+        } catch (err) {
+            setRegError(err.response?.data?.message || 'Failed to register project.');
+        } finally {
+            setIsRegistering(false);
+        }
+    };
 
     return (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-fadeIn">
@@ -311,14 +334,46 @@ const ProjectDetailModal = ({ project, onClose }) => {
                     </div>
                 </div>
 
+                {/* Registration Alerts */}
+                {regMessage && (
+                    <div className="mx-6 my-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
+                        {regMessage}
+                    </div>
+                )}
+                {regError && (
+                    <div className="mx-6 my-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold">
+                        {regError}
+                    </div>
+                )}
+
                 {/* Modal Footer */}
-                <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-                    <p className="text-xs text-gray-500 italic">
-                        * Match score represents candidate-project compatibility and readiness based on Phase 5 results.
-                    </p>
+                <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                            <label htmlFor="avail-hrs-input" className="font-semibold text-slate-700">Avail Hrs/Wk:</label>
+                            <input
+                                id="avail-hrs-input"
+                                type="number"
+                                min={1}
+                                max={80}
+                                value={regHours}
+                                onChange={(e) => setRegHours(e.target.value)}
+                                className="w-16 px-2 py-1 text-xs border rounded-lg bg-white font-medium"
+                            />
+                        </div>
+                        <button
+                            onClick={handleRegister}
+                            disabled={isRegistering}
+                            className="px-4 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors disabled:opacity-50 flex items-center gap-1"
+                        >
+                            <span>📝</span>
+                            <span>{isRegistering ? 'Registering...' : 'Register Project for ML Tracking'}</span>
+                        </button>
+                    </div>
+
                     <button
                         onClick={onClose}
-                        className="px-5 py-2 text-sm font-semibold bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors"
+                        className="px-5 py-2 text-xs font-semibold bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors self-end sm:self-auto"
                     >
                         Close Dossier
                     </button>

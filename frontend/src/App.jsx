@@ -9,6 +9,7 @@ import StudentProfile from './pages/StudentProfile';
 import Assessments from './pages/Assessments';
 import ProjectRecommendations from './pages/ProjectRecommendations';
 import AdminDashboard from './pages/AdminDashboard';
+import MlDatasetManagement from './pages/MlDatasetManagement';
 import ProtectedRoute from './components/ProtectedRoute';
 import OAuth2RedirectHandler from './pages/OAuth2RedirectHandler';
 
@@ -32,6 +33,8 @@ function App() {
                 <Route path="/assessments" element={<Assessments />} />
                 <Route path="/recommendations" element={<ProjectRecommendations />} />
                 <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/admin/ml-dataset" element={<MlDatasetManagement />} />
+                <Route path="/ml-dataset" element={<MlDatasetManagement />} />
               </Route>
               
               {/* Fallback */}

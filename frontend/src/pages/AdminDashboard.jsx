@@ -378,6 +378,37 @@ const AdminDashboard = () => {
                             ))}
                         </div>
                     </div>
+
+                    {/* ML Dataset Pipeline */}
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:col-span-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                            <SectionHeader
+                                icon="🧠"
+                                title="ML Dataset Pipeline (Phase 9 & 10)"
+                                subtitle="Student-project feasibility dataset collection, verification, and preparation"
+                            />
+                            <Link
+                                to="/admin/ml-dataset"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white text-xs font-bold rounded-xl transition shadow-sm w-fit"
+                            >
+                                Open ML Studio →
+                            </Link>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 text-center">
+                                <p className="text-3xl font-black text-indigo-700">{fmt(stats.totalMlDatasetRecords)}</p>
+                                <p className="text-xs font-semibold text-indigo-600 mt-1">Total ML Records</p>
+                            </div>
+                            <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 text-center">
+                                <p className="text-3xl font-black text-amber-700">{fmt(stats.pendingOutcomeRecords)}</p>
+                                <p className="text-xs font-semibold text-amber-600 mt-1">Pending Actual Outcome</p>
+                            </div>
+                            <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-center">
+                                <p className="text-3xl font-black text-emerald-700">{fmt(stats.trainingReadyRecords)}</p>
+                                <p className="text-xs font-semibold text-emerald-600 mt-1">Training-Ready (Validated)</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -388,12 +419,13 @@ const AdminDashboard = () => {
                     title="Quick Actions"
                     subtitle="Navigate to key sections of the platform"
                 />
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                     {[
                         { to: '/dashboard', icon: '📊', label: 'Student Dashboard', desc: 'View student perspective', color: 'from-indigo-50 to-indigo-100 border-indigo-200 text-indigo-700' },
                         { to: '/assessments', icon: '📝', label: 'Assessments', desc: 'Browse quiz system', color: 'from-amber-50 to-amber-100 border-amber-200 text-amber-700' },
                         { to: '/recommendations', icon: '🎯', label: 'Recommendations', desc: 'View project catalog', color: 'from-emerald-50 to-emerald-100 border-emerald-200 text-emerald-700' },
                         { to: '/profile', icon: '👤', label: 'Student Profile', desc: 'View profile editor', color: 'from-violet-50 to-violet-100 border-violet-200 text-violet-700' },
+                        { to: '/admin/ml-dataset', icon: '🤖', label: 'ML Dataset Pipeline', desc: 'Phase 9 dataset studio', color: 'from-purple-50 to-purple-100 border-purple-200 text-purple-700' },
                     ].map(({ to, icon, label, desc, color }) => (
                         <Link
                             key={to}

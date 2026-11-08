@@ -171,6 +171,20 @@ public class SecurityConfig {
                                 "/api/recommendations/**"
                         ).hasAnyRole("STUDENT", "ADMIN")
 
+                        // ML Dataset APIs
+                        .requestMatchers(
+                                "/api/ml-dataset/register"
+                        ).hasAnyRole("STUDENT", "ADMIN")
+
+                        .requestMatchers(
+                                "/api/ml-dataset/statistics",
+                                "/api/ml-dataset"
+                        ).hasAnyRole("STUDENT", "ADMIN")
+
+                        .requestMatchers(
+                                "/api/ml-dataset/**"
+                        ).hasRole("ADMIN")
+
                         // Everything else requires authentication
                         .anyRequest().authenticated()
                 )

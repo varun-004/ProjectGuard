@@ -26,6 +26,7 @@ const Navbar = () => {
 
     const adminLinks = [
         { to: '/admin', label: '🔐 Admin', icon: '🔐' },
+        { to: '/admin/ml-dataset', label: '📊 ML Dataset', icon: '📊' },
         { to: '/dashboard', label: 'Dashboard', icon: '⊞' },
         { to: '/recommendations', label: 'Projects', icon: '📂' },
         { to: '/assessments', label: 'Assessments', icon: '✦' },

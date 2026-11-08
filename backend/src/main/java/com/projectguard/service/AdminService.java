@@ -1,6 +1,8 @@
 package com.projectguard.service;
 
 import com.projectguard.dto.admin.AdminStatsResponse;
+import com.projectguard.entity.enums.MlOutcomeStatus;
+import com.projectguard.entity.enums.MlValidationStatus;
 import com.projectguard.entity.enums.Role;
 import com.projectguard.repository.*;
 import org.springframework.stereotype.Service;
@@ -21,6 +23,7 @@ public class AdminService {
     private final TechnologyRepository technologyRepository;
     private final AssessmentAttemptRepository assessmentAttemptRepository;
     private final AssessmentResultRepository assessmentResultRepository;
+    private final MlDatasetRepository mlDatasetRepository;
 
     public AdminService(
             UserRepository userRepository,
@@ -31,7 +34,8 @@ public class AdminService {
             SkillRepository skillRepository,
             TechnologyRepository technologyRepository,
             AssessmentAttemptRepository assessmentAttemptRepository,
-            AssessmentResultRepository assessmentResultRepository) {
+            AssessmentResultRepository assessmentResultRepository,
+            MlDatasetRepository mlDatasetRepository) {
         this.userRepository = userRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.projectRepository = projectRepository;
@@ -41,6 +45,7 @@ public class AdminService {
         this.technologyRepository = technologyRepository;
         this.assessmentAttemptRepository = assessmentAttemptRepository;
         this.assessmentResultRepository = assessmentResultRepository;
+        this.mlDatasetRepository = mlDatasetRepository;
     }
 
     /**
@@ -77,6 +82,13 @@ public class AdminService {
         // Assessment counts
         stats.setTotalAssessmentAttempts(assessmentAttemptRepository.count());
         stats.setTotalAssessmentResults(assessmentResultRepository.count());
+
+        // ML Dataset counts
+        if (mlDatasetRepository != null) {
+            stats.setTotalMlDatasetRecords(mlDatasetRepository.count());
+            stats.setPendingOutcomeRecords(mlDatasetRepository.countByOutcomeStatus(MlOutcomeStatus.PENDING_OUTCOME));
+            stats.setTrainingReadyRecords(mlDatasetRepository.countByValidationStatus(MlValidationStatus.VALIDATED));
+        }
 
         return stats;
     }
