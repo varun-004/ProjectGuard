@@ -10,6 +10,8 @@ import Assessments from './pages/Assessments';
 import ProjectRecommendations from './pages/ProjectRecommendations';
 import AdminDashboard from './pages/AdminDashboard';
 import MlDatasetManagement from './pages/MlDatasetManagement';
+import MlModelManagement from './pages/MlModelManagement';
+import ProjectFeasibilityPredictor from './pages/ProjectFeasibilityPredictor';
 import ProtectedRoute from './components/ProtectedRoute';
 import OAuth2RedirectHandler from './pages/OAuth2RedirectHandler';
 
@@ -35,6 +37,9 @@ function App() {
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/admin/ml-dataset" element={<MlDatasetManagement />} />
                 <Route path="/ml-dataset" element={<MlDatasetManagement />} />
+                <Route path="/admin/ml-model" element={<MlModelManagement />} />
+                <Route path="/ml-model" element={<MlModelManagement />} />
+                <Route path="/predict" element={<ProjectFeasibilityPredictor />} />
               </Route>
               
               {/* Fallback */}

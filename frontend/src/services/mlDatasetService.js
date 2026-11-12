@@ -27,6 +27,10 @@ const mlDatasetService = {
         return api.get('/ml-dataset/split');
     },
 
+    triggerPipeline: () => {
+        return api.post('/ml-dataset/pipeline/trigger');
+    },
+
     registerProject: (payload) => {
         return api.post('/ml-dataset/register', payload);
     },

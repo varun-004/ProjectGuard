@@ -83,7 +83,8 @@ const EvaluateOutcomeModal = ({ record, onClose, onEvaluated }) => {
                 actualOutcome: outcome,
                 labelEvidence: evidence,
                 labelNotes: notes,
-                validationConfirmed: true
+                validationConfirmed: true,
+                allowCorrection: Boolean(record.actualOutcome)
             });
             onEvaluated();
             onClose();
@@ -110,6 +111,12 @@ const EvaluateOutcomeModal = ({ record, onClose, onEvaluated }) => {
                 </div>
 
                 <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+                    {record.actualOutcome && (
+                        <div className="p-3 rounded-lg bg-amber-50 text-amber-800 text-xs border border-amber-200">
+                            ⚠️ This project record already has a verified outcome of <strong>{record.actualOutcome}</strong>. Submitting this evaluation will record an auditable correction.
+                        </div>
+                    )}
+
                     {error && (
                         <div className="p-3 rounded-lg bg-red-50 text-red-700 text-xs border border-red-200">
                             {error}
@@ -227,6 +234,7 @@ const MlDatasetManagement = () => {
     const [isPreparing, setIsPreparing] = useState(false);
     const [splitReport, setSplitReport] = useState(null);
     const [isDownloading, setIsDownloading] = useState(false);
+    const [isRunningPipeline, setIsRunningPipeline] = useState(false);
 
     const loadData = useCallback(async () => {
         setIsLoading(true);
@@ -282,6 +290,28 @@ const MlDatasetManagement = () => {
         }
     };
 
+    const handleTriggerPipeline = async () => {
+        setIsRunningPipeline(true);
+        setError('');
+        try {
+            const res = await mlDatasetService.triggerPipeline();
+            const data = res.data;
+            if (data.databasePreparationSummary) {
+                setPrepSummary(data.databasePreparationSummary);
+            }
+            if (data.mlServicePipeline?.split_report) {
+                setSplitReport(data.mlServicePipeline.split_report);
+            }
+            setActionMessage(`ML Service pipeline executed successfully: ${data.trainingReadyRecordsCount} training-ready records synchronized.`);
+            await loadData();
+        } catch (err) {
+            console.error('ML pipeline execution failed:', err);
+            setError('ML pipeline execution failed: ' + (err.response?.data?.message || err.message));
+        } finally {
+            setIsRunningPipeline(false);
+        }
+    };
+
     return (
         <div className="space-y-8 animate-fadeIn pb-12">
             {/* Header */}
@@ -309,6 +339,14 @@ const MlDatasetManagement = () => {
                     >
                         <span>⚙️</span>
                         <span>{isPreparing ? 'Validating...' : 'Validate & Prepare Dataset'}</span>
+                    </button>
+                    <button
+                        onClick={handleTriggerPipeline}
+                        disabled={isRunningPipeline}
+                        className="px-4 py-2 rounded-xl text-xs font-bold bg-purple-600 text-white hover:bg-purple-700 shadow-sm shadow-purple-200 transition-all flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                        <span>🔄</span>
+                        <span>{isRunningPipeline ? 'Synchronizing...' : 'Run ML Pipeline (Python)'}</span>
                     </button>
                     <button
                         onClick={handleDownloadCsv}

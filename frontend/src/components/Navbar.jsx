@@ -22,11 +22,14 @@ const Navbar = () => {
         { to: '/profile',   label: 'My Profile', icon: '◎' },
         { to: '/assessments', label: 'Assessments', icon: '✦' },
         { to: '/recommendations', label: 'Recommendations', icon: '✨' },
+        { to: '/predict',   label: '🎯 Feasibility', icon: '🎯' },
     ];
 
     const adminLinks = [
         { to: '/admin', label: '🔐 Admin', icon: '🔐' },
         { to: '/admin/ml-dataset', label: '📊 ML Dataset', icon: '📊' },
+        { to: '/admin/ml-model', label: '🤖 ML Models', icon: '🤖' },
+        { to: '/predict', label: '🎯 Feasibility', icon: '🎯' },
         { to: '/dashboard', label: 'Dashboard', icon: '⊞' },
         { to: '/recommendations', label: 'Projects', icon: '📂' },
         { to: '/assessments', label: 'Assessments', icon: '✦' },
