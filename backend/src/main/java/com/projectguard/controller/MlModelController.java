@@ -39,10 +39,16 @@ public class MlModelController {
     public ResponseEntity<MlPredictionResponseDto> predict(@Valid @RequestBody MlPredictionRequestDto requestDto) {
         MlPredictionResponseDto response = mlModelService.predict(requestDto);
         if ("NO_MODEL".equalsIgnoreCase(response.getStatus())) {
-            return ResponseEntity.status(404).body(response);
+            return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).body(response);
+        }
+        if ("UNREACHABLE".equalsIgnoreCase(response.getStatus())) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE).body(response);
         }
         if ("VALIDATION_ERROR".equalsIgnoreCase(response.getStatus())) {
             return ResponseEntity.status(422).body(response);
+        }
+        if (!"SUCCESS".equalsIgnoreCase(response.getStatus())) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.BAD_GATEWAY).body(response);
         }
         return ResponseEntity.ok(response);
     }

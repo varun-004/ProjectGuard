@@ -170,5 +170,63 @@ class MlModelControllerTest {
         assertNotNull(response.getBody());
         assertEquals("v1", response.getBody().get("active_version"));
     }
+
+    @Test
+    void testPredictionRequestDto_JacksonSnakeCaseAndCamelCaseDeserialization() throws Exception {
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+
+        // 1. Test snake_case JSON from browser
+        String snakeCaseJson = """
+            {
+                "student_skill_level": 1.38,
+                "skill_gap": 10.67,
+                "project_complexity": "MEDIUM",
+                "team_size": 2,
+                "available_hours_per_week": 15.0,
+                "technology_familiarity": 1.45,
+                "number_of_requirements": 5,
+                "number_of_features": 5,
+                "previous_experience": 0.0,
+                "estimated_effort": 90.0
+            }
+            """;
+        MlPredictionRequestDto fromSnake = mapper.readValue(snakeCaseJson, MlPredictionRequestDto.class);
+        assertEquals(1.38, fromSnake.getStudentSkillLevel());
+        assertEquals(10.67, fromSnake.getSkillGap());
+        assertEquals("MEDIUM", fromSnake.getProjectComplexity());
+        assertEquals(2, fromSnake.getTeamSize());
+        assertEquals(15.0, fromSnake.getAvailableHoursPerWeek());
+        assertEquals(1.45, fromSnake.getTechnologyFamiliarity());
+        assertEquals(5, fromSnake.getNumberOfRequirements());
+        assertEquals(5, fromSnake.getNumberOfFeatures());
+        assertEquals(0.0, fromSnake.getPreviousExperience());
+        assertEquals(90.0, fromSnake.getEstimatedEffort());
+
+        // 2. Test camelCase JSON
+        String camelCaseJson = """
+            {
+                "studentSkillLevel": 2.5,
+                "skillGap": 8.0,
+                "projectComplexity": "EASY",
+                "teamSize": 3,
+                "availableHoursPerWeek": 20.0,
+                "technologyFamiliarity": 3.0,
+                "numberOfRequirements": 4,
+                "numberOfFeatures": 4,
+                "previousExperience": 1.5,
+                "estimatedEffort": 120.0
+            }
+            """;
+        MlPredictionRequestDto fromCamel = mapper.readValue(camelCaseJson, MlPredictionRequestDto.class);
+        assertEquals(2.5, fromCamel.getStudentSkillLevel());
+        assertEquals(8.0, fromCamel.getSkillGap());
+        assertEquals("EASY", fromCamel.getProjectComplexity());
+
+        // 3. Test serialization outputs snake_case for Python ML Service
+        String serialized = mapper.writeValueAsString(fromSnake);
+        assertTrue(serialized.contains("\"student_skill_level\":1.38"));
+        assertTrue(serialized.contains("\"skill_gap\":10.67"));
+        assertTrue(serialized.contains("\"project_complexity\":\"MEDIUM\""));
+    }
 }
 

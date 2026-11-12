@@ -5,7 +5,7 @@ FastAPI service exposing dataset validation, encoding, and splitting utilities.
 from typing import List, Dict, Any, Optional
 import os
 from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, AliasChoices
 import pandas as pd
 
 from app.dataset_validator import (
@@ -211,16 +211,16 @@ def get_dataset_statistics():
 # ─────────────────────────────────────────────────────────────────────────────
 
 class PredictionRequest(BaseModel):
-    student_skill_level: float
-    skill_gap: float
-    project_complexity: str
-    team_size: int
-    available_hours_per_week: float
-    technology_familiarity: float
-    number_of_requirements: int
-    number_of_features: int
-    previous_experience: float
-    estimated_effort: float
+    student_skill_level: float = Field(validation_alias=AliasChoices("student_skill_level", "studentSkillLevel"))
+    skill_gap: float = Field(validation_alias=AliasChoices("skill_gap", "skillGap"))
+    project_complexity: str = Field(validation_alias=AliasChoices("project_complexity", "projectComplexity"))
+    team_size: int = Field(validation_alias=AliasChoices("team_size", "teamSize"))
+    available_hours_per_week: float = Field(validation_alias=AliasChoices("available_hours_per_week", "availableHoursPerWeek"))
+    technology_familiarity: float = Field(validation_alias=AliasChoices("technology_familiarity", "technologyFamiliarity"))
+    number_of_requirements: int = Field(validation_alias=AliasChoices("number_of_requirements", "numberOfRequirements"))
+    number_of_features: int = Field(validation_alias=AliasChoices("number_of_features", "numberOfFeatures"))
+    previous_experience: float = Field(validation_alias=AliasChoices("previous_experience", "previousExperience"))
+    estimated_effort: float = Field(validation_alias=AliasChoices("estimated_effort", "estimatedEffort"))
 
 
 class ModelTrainRequest(BaseModel):

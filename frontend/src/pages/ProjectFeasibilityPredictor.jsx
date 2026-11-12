@@ -21,6 +21,24 @@ const ProjectFeasibilityPredictor = () => {
     const [loading, setLoading] = useState(false);
     const [statusLoading, setStatusLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [message, setMessage] = useState(null);
+
+    const loadDemoProject = () => {
+        setFormData({
+            student_skill_level: 1.38,
+            skill_gap: 10.67,
+            project_complexity: 'MEDIUM',
+            team_size: 2,
+            available_hours_per_week: 15.0,
+            technology_familiarity: 1.45,
+            number_of_requirements: 5,
+            number_of_features: 5,
+            previous_experience: 0.0,
+            estimated_effort: 90.0
+        });
+        setMessage("Loaded actual parameters for recommended project: 'Non-Invasive Industrial Machine Health Monitoring'");
+        setError(null);
+    };
 
     useEffect(() => {
         const fetchStatusAndProfile = async () => {
@@ -85,10 +103,19 @@ const ProjectFeasibilityPredictor = () => {
             };
 
             const res = await mlModelService.predict(payload);
-            setPredictionResult(res.data);
+            if (res.data?.status === 'SUCCESS' && res.data?.prediction) {
+                setPredictionResult(res.data);
+                setError(null);
+            } else {
+                setPredictionResult(null);
+                setError(res.data?.message || 'Model prediction is currently unavailable.');
+            }
         } catch (err) {
+            setPredictionResult(null);
             if (err.response?.status === 404 || err.response?.data?.status === 'NO_MODEL') {
-                setError('No trained ML model is currently active. Model training is pending authentic verified dataset records.');
+                setError('No trained ML model is currently active. Model training is pending authentic verified dataset records (Minimum 50 records required).');
+            } else if (err.response?.status === 503 || err.response?.data?.status === 'UNREACHABLE') {
+                setError('ML Service is currently offline or unreachable. Please verify Python FastAPI service is running on port 8000.');
             } else if (err.response?.status === 422) {
                 const details = err.response.data?.errors || err.response.data?.detail?.errors || [];
                 setError('Validation error: ' + (Array.isArray(details) ? details.join(', ') : JSON.stringify(details)));
@@ -103,15 +130,31 @@ const ProjectFeasibilityPredictor = () => {
     return (
         <div className="max-w-4xl mx-auto space-y-8 pb-12">
             {/* Header */}
-            <div className="border-b pb-6">
-                <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">ML Prediction</span>
-                    <h1 className="text-2xl font-bold text-gray-900">Project Feasibility Predictor</h1>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-6">
+                <div>
+                    <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">ML Prediction</span>
+                        <h1 className="text-2xl font-bold text-gray-900">Project Feasibility Predictor</h1>
+                    </div>
+                    <p className="text-gray-600 text-sm mt-1">
+                        Estimate whether a planned student-project combination is feasible based on the trained supervised classifier.
+                    </p>
                 </div>
-                <p className="text-gray-600 text-sm mt-1">
-                    Estimate whether a planned student-project combination is feasible based on the trained supervised classifier.
-                </p>
+                <button
+                    type="button"
+                    onClick={loadDemoProject}
+                    className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold rounded-xl text-xs transition shadow-sm flex items-center gap-2 w-fit"
+                >
+                    ⚡ Load "Machine Health Monitoring" Data
+                </button>
             </div>
+
+            {message && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs flex items-center justify-between">
+                    <span>✨ {message}</span>
+                    <button onClick={() => setMessage(null)} className="text-emerald-600 font-bold hover:underline">✕</button>
+                </div>
+            )}
 
             {/* Model Status Banner */}
             {!statusLoading && (
@@ -343,7 +386,7 @@ const ProjectFeasibilityPredictor = () => {
 
                 {/* Result Card */}
                 <div className="space-y-4">
-                    {predictionResult ? (
+                    {predictionResult && predictionResult.status === 'SUCCESS' && predictionResult.prediction ? (
                         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6">
                             <h2 className="text-base font-bold text-gray-900 border-b pb-3">Prediction Outcome</h2>
 
@@ -353,15 +396,15 @@ const ProjectFeasibilityPredictor = () => {
                                 <div className={`mt-2 text-3xl font-black ${
                                     predictionResult.prediction === 'FEASIBLE' ? 'text-emerald-600' : 'text-rose-600'
                                 }`}>
-                                    {predictionResult.prediction === 'FEASIBLE' ? '✅ FEASIBLE' : '⚠️ NOT FEASIBLE'}
+                                    {predictionResult.prediction === 'FEASIBLE' ? '✅ FEASIBLE' : (predictionResult.prediction === 'NOT_FEASIBLE' ? '⚠️ NOT FEASIBLE' : predictionResult.prediction)}
                                 </div>
                                 <p className="text-xs text-gray-500 mt-1">
-                                    Model version: <strong>{predictionResult.modelVersion || 'v1'}</strong> ({predictionResult.algorithm || 'ML Classifier'})
+                                    Model version: <strong>{predictionResult.modelVersion || 'Active Model'}</strong> ({predictionResult.algorithm || 'Supervised Classifier'})
                                 </p>
                             </div>
 
                             {/* Probability Meter */}
-                            {predictionResult.probability !== null && (
+                            {predictionResult.probability !== null && predictionResult.probability !== undefined && (
                                 <div className="space-y-1.5">
                                     <div className="flex justify-between text-xs font-semibold">
                                         <span className="text-gray-600">Feasibility Probability:</span>
@@ -398,16 +441,22 @@ const ProjectFeasibilityPredictor = () => {
                             )}
 
                             {/* Disclaimer */}
-                            <div className="p-3 bg-gray-50 rounded-xl text-2xs text-gray-500 leading-relaxed border border-gray-100">
-                                <strong className="text-gray-700">Disclaimer:</strong> {predictionResult.disclaimer}
-                            </div>
+                            {predictionResult.disclaimer && (
+                                <div className="p-3 bg-gray-50 rounded-xl text-2xs text-gray-500 leading-relaxed border border-gray-100">
+                                    <strong className="text-gray-700">Disclaimer:</strong> {predictionResult.disclaimer}
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center flex flex-col items-center justify-center min-h-[300px] text-gray-400 space-y-3">
                             <span className="text-4xl">🔮</span>
-                            <p className="text-sm font-medium text-gray-600">No Prediction Run Yet</p>
+                            <p className="text-sm font-medium text-gray-600">
+                                {modelStatus?.modelAvailable ? 'Ready for Prediction' : 'Model Training Pending'}
+                            </p>
                             <p className="text-xs text-gray-400 max-w-xs">
-                                Adjust the parameters and click "Predict Feasibility" to evaluate whether this project configuration is viable.
+                                {modelStatus?.modelAvailable
+                                    ? 'Adjust the parameters and click "Predict Feasibility" to evaluate whether this project configuration is viable.'
+                                    : 'A supervised classifier will become active once minimum 50 verified authentic dataset outcomes are collected and trained.'}
                             </p>
                         </div>
                     )}

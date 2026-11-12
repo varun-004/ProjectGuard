@@ -217,13 +217,53 @@ The Spring Boot backend acts as the authoritative gate between the user interfac
 
 All layers pass automated test suites:
 - **Python ML Service**: `20 passed, 0 failed` (`pytest`)
-  - 13 Phase 9 dataset operations tests
-  - 7 Phase 10 model training, comparison, registry, and prediction tests
-- **Spring Boot Backend**: `78 passed, 0 failed` (`mvn test`)
-  - 8 `MlModelControllerTest` tests
+  - 13 Phase 9 dataset operations tests (`test_dataset.py`)
+  - 7 Phase 10 model training, comparison, registry, and prediction tests (`test_model.py`)
+- **Spring Boot Backend**: `79 passed, 0 failures, 0 errors` (`mvn test`)
+  - 9 `MlModelControllerTest` tests
   - 3 `MlModelServiceTest` tests
   - 8 `MlDatasetControllerTest` tests
   - 13 `MlDatasetServiceTest` tests
-  - 46 recommendation, assessment, and core domain tests
-- **Frontend**: Clean production build (`npx vite build` succeeded in 4.62s)
+  - 14 `AiProjectGeneratorServiceTest` tests
+  - 10 `Phase6RecommendationEndToEndTest` tests
+  - 10 `StudentServiceTest` tests
+  - 5 `PersonalizedProjectRecommendationTest` tests
+  - 4 `RecommendationEngineServiceTest` tests
+  - 3 `ProjectQualityGateServiceTest` tests
+- **Frontend**: Clean production build (`npx vite build` succeeded with 117 modules transformed, 0 errors)
+
+---
+
+## 11. Root Cause Analysis & Resolution (HTTP 422 & NO_MODEL Handling)
+
+### Issue 1: HTTP 422 Unprocessable Entity
+- **Root Cause**:
+  1. The frontend `ProjectFeasibilityPredictor.jsx` was transmitting dual-key JSON payloads containing both `snake_case` and `camelCase` keys in the same object as an earlier ad-hoc workaround.
+  2. Spring Boot's `MlPredictionRequestDto` initially lacked explicit Jackson serialization mapping, causing inconsistencies when forwarding serialized JSON from Spring Boot to Python FastAPI.
+- **Resolution**:
+  1. Configured `@JsonProperty("field_name")` and `@JsonAlias({"fieldName", "field_name"})` on all 10 fields in `MlPredictionRequestDto.java`, ensuring seamless bidirectional deserialization from browser and normalized `snake_case` serialization towards Python.
+  2. In `ProjectFeasibilityPredictor.jsx`, removed the redundant dual-key block and established a clean, single-format `snake_case` request payload.
+  3. FastAPI `PredictionRequest` Pydantic model uses `AliasChoices` and validation constraints matching Phase 9 ranges.
+
+### Issue 2: Frontend Prediction State Synchronization
+- **Root Cause**:
+  1. UI had fallback rendering (`|| 'v1'`, `|| 'ML Classifier'`) and evaluated `prediction !== 'FEASIBLE'` before verifying whether a prediction actually succeeded. When the API returned `NO_MODEL`, the UI mistakenly displayed a `NOT_FEASIBLE` badge alongside a warning banner.
+- **Resolution**:
+  1. Replaced fallback evaluations with strict `status === 'SUCCESS' && predictionResult?.prediction` guarding.
+  2. Display the authoritative `Model Training Pending` card when `NO_MODEL` (HTTP 404) is received.
+
+---
+
+## 12. Known Limitations & Production Readiness
+
+1. **No Production Model Currently Deployed**:
+   The model registry (`ml-service/models/`) is empty, and `active_version.txt` does not exist. This is the correct, honest state before genuine dataset collection.
+2. **Dataset Readiness Gate Requirement**:
+   ML model training strictly requires a minimum of **50 authentic verified records** with both `FEASIBLE` and `NOT_FEASIBLE` project outcomes represented. Currently, only 1 unverified pending record exists in the database.
+3. **Feasibility Predictor UI Behavior**:
+   The UI correctly presents a **"Model Training Pending"** state until authentic project outcome records are submitted and validated.
+4. **Service Dependency**:
+   The Python FastAPI ML service must be running on port 8000 for ML model management and prediction endpoints to respond. Spring Boot returns HTTP 503 (`UNREACHABLE`) if the service is offline.
+5. **Windows Process Constraints**:
+   `RandomForestClassifier` uses `n_jobs=1` to guarantee stable execution on Windows within Python virtual environment processes.
 
