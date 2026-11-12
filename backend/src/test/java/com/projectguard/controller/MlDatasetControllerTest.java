@@ -105,13 +105,14 @@ class MlDatasetControllerTest {
         MlOutcomeUpdateRequest req = new MlOutcomeUpdateRequest();
         req.setActualOutcome("FEASIBLE");
         req.setLabelEvidence("Complete demonstration verified");
+        req.setValidationConfirmed(true);
 
         MlDatasetRecordDto updated = new MlDatasetRecordDto();
         updated.setId(55L);
         updated.setActualOutcome("FEASIBLE");
         updated.setOutcomeStatus("FEASIBLE");
 
-        when(mlDatasetService.recordActualOutcome(eq(55L), any(MlOutcomeUpdateRequest.class)))
+        when(mlDatasetService.recordActualOutcome(eq(55L), any(MlOutcomeUpdateRequest.class), any()))
                 .thenReturn(updated);
 
         ResponseEntity<MlDatasetRecordDto> response = controller.recordActualOutcome(55L, req, adminAuth);
@@ -128,6 +129,18 @@ class MlDatasetControllerTest {
         req.setActualOutcome("FEASIBLE");
 
         assertThrows(RuntimeException.class, () -> controller.recordActualOutcome(55L, req, studentAuth));
+    }
+
+    @Test
+    void testTriggerMlPipeline_AdminSuccess() {
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(adminUser));
+        Map<String, Object> pipelineResult = Map.of("status", "SUCCESS", "trainingReadyRecordsCount", 12);
+        when(mlDatasetService.triggerMlServicePipeline()).thenReturn(pipelineResult);
+
+        ResponseEntity<Map<String, Object>> response = controller.triggerMlPipeline(adminAuth);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("SUCCESS", response.getBody().get("status"));
     }
 
     @Test

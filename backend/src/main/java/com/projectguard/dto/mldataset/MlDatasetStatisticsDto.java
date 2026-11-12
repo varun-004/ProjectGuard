@@ -4,6 +4,7 @@ public class MlDatasetStatisticsDto {
     private long totalRecords;
     private long completeRecords;
     private long incompleteRecords;
+    private long rejectedRecords;
     private long pendingOutcomeRecords;
     private long verifiedFeasibleRecords;
     private long verifiedNotFeasibleRecords;
@@ -20,6 +21,9 @@ public class MlDatasetStatisticsDto {
 
     public long getIncompleteRecords() { return incompleteRecords; }
     public void setIncompleteRecords(long incompleteRecords) { this.incompleteRecords = incompleteRecords; }
+
+    public long getRejectedRecords() { return rejectedRecords; }
+    public void setRejectedRecords(long rejectedRecords) { this.rejectedRecords = rejectedRecords; }
 
     public long getPendingOutcomeRecords() { return pendingOutcomeRecords; }
     public void setPendingOutcomeRecords(long pendingOutcomeRecords) { this.pendingOutcomeRecords = pendingOutcomeRecords; }

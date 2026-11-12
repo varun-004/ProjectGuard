@@ -44,17 +44,20 @@ class DatasetManager:
     def process_and_split(
         self,
         df: pd.DataFrame,
-        group_col: Optional[str] = None
+        group_col: Optional[str] = None,
+        test_size: float = 0.20,
+        random_state: int = 42
     ) -> Dict[str, Any]:
         """
         Validates, filters eligible records, and produces 80/20 train/test split.
+        Saves projectguard_ml_dataset.csv and, when ready, projectguard_train.csv and projectguard_test.csv.
         """
         valid_df, invalid_df, val_summary = validate_dataframe(df)
 
         train_df, test_df, split_report = split_dataset(
             valid_df,
-            test_size=0.20,
-            random_state=42,
+            test_size=test_size,
+            random_state=random_state,
             group_col=group_col
         )
 

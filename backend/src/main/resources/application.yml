@@ -71,4 +71,8 @@ gemini:
     timeout-seconds: ${GEMINI_TIMEOUT_SECONDS:60}
     max-generate-count: ${GEMINI_MAX_GENERATE_COUNT:5}
     default-generate-count: ${GEMINI_DEFAULT_GENERATE_COUNT:3}
-    
+
+ml:
+  service:
+    url: ${ML_SERVICE_URL:http://localhost:8000}
+    timeout-seconds: ${ML_SERVICE_TIMEOUT_SECONDS:10}

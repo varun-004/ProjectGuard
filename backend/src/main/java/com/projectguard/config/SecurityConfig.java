@@ -185,6 +185,16 @@ public class SecurityConfig {
                                 "/api/ml-dataset/**"
                         ).hasRole("ADMIN")
 
+                        // ML Model APIs (Phase 10)
+                        .requestMatchers(
+                                "/api/ml-model/status",
+                                "/api/ml-model/predict"
+                        ).hasAnyRole("STUDENT", "ADMIN")
+
+                        .requestMatchers(
+                                "/api/ml-model/**"
+                        ).hasRole("ADMIN")
+
                         // Everything else requires authentication
                         .anyRequest().authenticated()
                 )

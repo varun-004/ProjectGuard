@@ -12,6 +12,7 @@ public class MlOutcomeUpdateRequest {
     private String labelEvidence;
     private String labelNotes;
     private Boolean validationConfirmed;
+    private Boolean allowCorrection;
 
     public MlOutcomeUpdateRequest() {}
 
@@ -26,5 +27,8 @@ public class MlOutcomeUpdateRequest {
 
     public Boolean getValidationConfirmed() { return validationConfirmed; }
     public void setValidationConfirmed(Boolean validationConfirmed) { this.validationConfirmed = validationConfirmed; }
+
+    public Boolean getAllowCorrection() { return allowCorrection; }
+    public void setAllowCorrection(Boolean allowCorrection) { this.allowCorrection = allowCorrection; }
 }
 

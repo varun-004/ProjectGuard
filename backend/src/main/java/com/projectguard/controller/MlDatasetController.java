@@ -115,7 +115,21 @@ public class MlDatasetController {
         if (user.getRole() != Role.ADMIN) {
             throw new BadRequestException("Only authorized administrators or evaluators can record actual project outcomes.");
         }
-        return ResponseEntity.ok(mlDatasetService.recordActualOutcome(id, request));
+        return ResponseEntity.ok(mlDatasetService.recordActualOutcome(id, request, user));
+    }
+
+    /**
+     * POST /api/ml-dataset/pipeline/trigger
+     * Admin executes the full authoritative dataset flow:
+     * MySQL validation -> Spring Boot export -> Python FastAPI preprocessing -> 80/20 train/test CSVs.
+     */
+    @PostMapping("/pipeline/trigger")
+    public ResponseEntity<Map<String, Object>> triggerMlPipeline(Authentication authentication) {
+        User user = getUser(authentication);
+        if (user.getRole() != Role.ADMIN) {
+            throw new BadRequestException("Only authorized administrators can trigger the ML training pipeline.");
+        }
+        return ResponseEntity.ok(mlDatasetService.triggerMlServicePipeline());
     }
 
     /**

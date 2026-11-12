@@ -5,8 +5,11 @@ import java.util.List;
 
 public class MlDatasetPrepareSummaryDto {
     private long totalDatabaseRecords;
+    private long completeRecords;
+    private long incompleteRecords;
     private long eligibleRecords;
     private long excludedRecords;
+    private long rejectedRecords;
     private long pendingOutcomeRecords;
     private long verifiedFeasibleRecords;
     private long verifiedNotFeasibleRecords;
@@ -46,11 +49,20 @@ public class MlDatasetPrepareSummaryDto {
     public long getTotalDatabaseRecords() { return totalDatabaseRecords; }
     public void setTotalDatabaseRecords(long totalDatabaseRecords) { this.totalDatabaseRecords = totalDatabaseRecords; }
 
+    public long getCompleteRecords() { return completeRecords; }
+    public void setCompleteRecords(long completeRecords) { this.completeRecords = completeRecords; }
+
+    public long getIncompleteRecords() { return incompleteRecords; }
+    public void setIncompleteRecords(long incompleteRecords) { this.incompleteRecords = incompleteRecords; }
+
     public long getEligibleRecords() { return eligibleRecords; }
     public void setEligibleRecords(long eligibleRecords) { this.eligibleRecords = eligibleRecords; }
 
     public long getExcludedRecords() { return excludedRecords; }
     public void setExcludedRecords(long excludedRecords) { this.excludedRecords = excludedRecords; }
+
+    public long getRejectedRecords() { return rejectedRecords; }
+    public void setRejectedRecords(long rejectedRecords) { this.rejectedRecords = rejectedRecords; }
 
     public long getPendingOutcomeRecords() { return pendingOutcomeRecords; }
     public void setPendingOutcomeRecords(long pendingOutcomeRecords) { this.pendingOutcomeRecords = pendingOutcomeRecords; }

@@ -304,6 +304,7 @@ class MlDatasetServiceTest {
         r1.setEstimatedEffort(240.0);
         r1.setActualOutcome("FEASIBLE");
         r1.setOutcomeStatus(MlOutcomeStatus.FEASIBLE);
+        r1.setLabelEvidence("Verified via live capstone demonstration with high fidelity metrics.");
 
         // Record 2: Pending outcome (must be excluded from training-ready)
         MlDataset r2 = new MlDataset();
@@ -325,6 +326,7 @@ class MlDatasetServiceTest {
         r3.setId(3L);
         r3.setActualOutcome("NOT_FEASIBLE");
         r3.setOutcomeStatus(MlOutcomeStatus.NOT_FEASIBLE);
+        r3.setLabelEvidence("Project was abandoned due to unmet requirements.");
         r3.setStudentSkillLevel(null); // Missing!
 
         when(mlDatasetRepository.findAll()).thenReturn(List.of(r1, r2, r3));
@@ -355,6 +357,8 @@ class MlDatasetServiceTest {
         r1.setEstimatedEffort(400.0);
         r1.setActualOutcome("FEASIBLE");
         r1.setOutcomeStatus(MlOutcomeStatus.FEASIBLE);
+        r1.setValidationStatus(MlValidationStatus.VALIDATED);
+        r1.setLabelEvidence("Comprehensive automated testing pass confirmed with thesis defense.");
 
         MlDataset r2 = new MlDataset();
         r2.setId(2L);
@@ -383,6 +387,137 @@ class MlDatasetServiceTest {
         assertEquals(0, report.get("totalTrainingReadyRecords"));
         assertEquals(false, report.get("isReadyForTraining"));
         assertTrue(((String) report.get("message")).contains("insufficient verified real outcome labels"));
+    }
+
+    @Test
+    void testEvaluatorOutcomeRecording_MissingConfirmation_ThrowsBadRequest() {
+        MlDataset record = new MlDataset();
+        record.setId(20L);
+        when(mlDatasetRepository.findById(20L)).thenReturn(Optional.of(record));
+
+        MlOutcomeUpdateRequest req = new MlOutcomeUpdateRequest();
+        req.setActualOutcome("FEASIBLE");
+        req.setLabelEvidence("Demonstrated project successfully");
+        req.setValidationConfirmed(false); // Unconfirmed
+
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> mlDatasetService.recordActualOutcome(20L, req));
+        assertTrue(ex.getMessage().contains("validationConfirmed=true"));
+    }
+
+    @Test
+    void testEvaluatorOutcomeRecording_MissingOrShortEvidence_ThrowsBadRequest() {
+        MlDataset record = new MlDataset();
+        record.setId(21L);
+        when(mlDatasetRepository.findById(21L)).thenReturn(Optional.of(record));
+
+        MlOutcomeUpdateRequest req = new MlOutcomeUpdateRequest();
+        req.setActualOutcome("FEASIBLE");
+        req.setValidationConfirmed(true);
+        req.setLabelEvidence("short"); // Less than 10 characters
+
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> mlDatasetService.recordActualOutcome(21L, req));
+        assertTrue(ex.getMessage().contains("Meaningful label evidence"));
+    }
+
+    @Test
+    void testEvaluatorOutcomeRecording_SafeCorrectionProcess() {
+        MlDataset record = new MlDataset();
+        record.setId(22L);
+        record.setStudentSkillLevel(3.0);
+        record.setSkillGap(2.0);
+        record.setProjectComplexity(ProjectComplexity.MEDIUM);
+        record.setTeamSize(3);
+        record.setAvailableHoursPerWeek(20.0);
+        record.setTechnologyFamiliarity(3.2);
+        record.setNumberOfRequirements(5);
+        record.setNumberOfFeatures(4);
+        record.setPreviousExperience(1.5);
+        record.setEstimatedEffort(240.0);
+        record.setActualOutcome("FEASIBLE");
+        record.setOutcomeStatus(MlOutcomeStatus.FEASIBLE);
+        record.setLabelEvidence("Initial assessment passed");
+
+        when(mlDatasetRepository.findById(22L)).thenReturn(Optional.of(record));
+
+        // Attempt 1: Overwrite without allowCorrection -> must fail
+        MlOutcomeUpdateRequest req = new MlOutcomeUpdateRequest();
+        req.setActualOutcome("NOT_FEASIBLE");
+        req.setValidationConfirmed(true);
+        req.setLabelEvidence("Upon code audit, project failed validation.");
+        req.setAllowCorrection(false);
+
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> mlDatasetService.recordActualOutcome(22L, req));
+        assertTrue(ex.getMessage().contains("already has a verified outcome"));
+
+        // Attempt 2: Overwrite with allowCorrection=true -> succeeds and appends audit trail
+        req.setAllowCorrection(true);
+        when(mlDatasetRepository.save(any(MlDataset.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        MlDatasetRecordDto result = mlDatasetService.recordActualOutcome(22L, req);
+        assertEquals("NOT_FEASIBLE", result.getActualOutcome());
+        assertTrue(result.getLabelNotes().contains("AUDIT: Outcome corrected from FEASIBLE to NOT_FEASIBLE"));
+    }
+
+    @Test
+    void testStudentProjectRegistration_CannotRegisterAnotherStudentProject() {
+        StudentProfile otherProfile = new StudentProfile();
+        otherProfile.setId(99L);
+
+        Project customProject = new Project();
+        customProject.setId(777L);
+        customProject.setIsCatalog(false);
+        customProject.setStudentProfile(otherProfile); // Belongs to other student!
+
+        when(userRepository.findByEmail("student@testguard.com")).thenReturn(Optional.of(studentUser));
+        when(studentProfileRepository.findByUserId(1L)).thenReturn(Optional.of(studentProfile));
+        when(projectRepository.findById(777L)).thenReturn(Optional.of(customProject));
+
+        MlProjectRegistrationRequest req = new MlProjectRegistrationRequest();
+        req.setProjectId(777L);
+        req.setAvailableHoursPerWeek(15.0);
+
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> mlDatasetService.registerStudentProject("student@testguard.com", req));
+        assertTrue(ex.getMessage().contains("belongs to another student"));
+    }
+
+    @Test
+    void testNoArbitraryFallbackValues_MissingFieldsRemainNullAndRecordIncomplete() {
+        StudentProfile sparseProfile = new StudentProfile();
+        sparseProfile.setId(33L);
+        sparseProfile.setStudentSkills(Collections.emptyList());
+        sparseProfile.setTeamSize(null); // No team size!
+
+        Project sparseProject = new Project();
+        sparseProject.setId(444L);
+        sparseProject.setComplexityLevel("MEDIUM");
+        sparseProject.setEstimatedWeeks(null); // No estimated duration!
+        sparseProject.setRequirements(Collections.emptyList());
+        sparseProject.setMinTeamSize(null);
+
+        when(mlDatasetRepository.findByStudentProfileIdAndProjectId(33L, 444L)).thenReturn(Optional.empty());
+        when(mlDatasetRepository.save(any(MlDataset.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        MlDataset snapshot = mlDatasetService.recordDatasetSnapshot(
+                sparseProfile,
+                sparseProject,
+                null, // availableHoursPerWeek NOT provided
+                null,
+                null,
+                null,
+                null,
+                "AI_GENERATION"
+        );
+
+        assertNull(snapshot.getAvailableHoursPerWeek(), "Must not assume 15.0 hours/week");
+        assertNull(snapshot.getTeamSize(), "Must not assume 1 team member");
+        assertNull(snapshot.getNumberOfRequirements(), "Must not assume 2 requirements");
+        assertNull(snapshot.getNumberOfFeatures(), "Must not assume 3 features");
+        assertNull(snapshot.getEstimatedEffort(), "Must not assume 12 weeks or effort");
+        assertEquals(MlValidationStatus.INCOMPLETE, snapshot.getValidationStatus(), "Incomplete record must be flagged INCOMPLETE");
     }
 }
 

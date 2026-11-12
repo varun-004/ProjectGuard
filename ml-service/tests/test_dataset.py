@@ -229,3 +229,104 @@ def test_insufficient_data_handling():
     assert train_df.empty
     assert test_df.empty
 
+
+def test_missing_labels_rejected():
+    """Verify records missing outcome labels are strictly rejected from training."""
+    rec_missing = {
+        "student_skill_level": 3.0,
+        "skill_gap": 4.0,
+        "project_complexity": "MEDIUM",
+        "team_size": 2,
+        "available_hours_per_week": 20.0,
+        "technology_familiarity": 3.0,
+        "number_of_requirements": 3,
+        "number_of_features": 2,
+        "previous_experience": 1.0,
+        "estimated_effort": 200.0,
+        "actual_outcome": None
+    }
+    is_valid, errors = validate_record(rec_missing)
+    assert not is_valid
+    assert any("actual_outcome is missing" in e for e in errors)
+
+
+def test_invalid_numeric_ranges_and_categories():
+    """Verify invalid numeric ranges and categories are rejected with explicit errors."""
+    base = {
+        "student_skill_level": 3.0,
+        "skill_gap": 4.0,
+        "project_complexity": "MEDIUM",
+        "team_size": 2,
+        "available_hours_per_week": 20.0,
+        "technology_familiarity": 3.0,
+        "number_of_requirements": 3,
+        "number_of_features": 2,
+        "previous_experience": 1.0,
+        "estimated_effort": 200.0,
+        "actual_outcome": "FEASIBLE"
+    }
+
+    # Skill gap negative
+    v, errs = validate_record(dict(base, skill_gap=-1.0))
+    assert not v and any("skill_gap" in e for e in errs)
+
+    # Hours > 80
+    v, errs = validate_record(dict(base, available_hours_per_week=120.0))
+    assert not v and any("available_hours_per_week" in e for e in errs)
+
+    # Tech familiarity < 1.0
+    v, errs = validate_record(dict(base, technology_familiarity=0.5))
+    assert not v and any("technology_familiarity" in e for e in errs)
+
+    # Effort negative
+    v, errs = validate_record(dict(base, estimated_effort=-50.0))
+    assert not v and any("estimated_effort" in e for e in errs)
+
+    # Experience negative
+    v, errs = validate_record(dict(base, previous_experience=-2.0))
+    assert not v and any("previous_experience" in e for e in errs)
+
+
+def test_class_imbalance_detection(sample_valid_records):
+    """Verify class imbalance (e.g. only 1 or 0 of one class) halts readiness."""
+    imbalanced = sample_valid_records.copy()
+    # Change all but one to FEASIBLE
+    imbalanced["actual_outcome"] = "FEASIBLE"
+    imbalanced.loc[0, "actual_outcome"] = "NOT_FEASIBLE"
+
+    train_df, test_df, report = split_dataset(imbalanced, test_size=0.20, random_state=42)
+    assert not report["is_ready_for_training"]
+    assert "Class imbalance constraint violated" in report["message"]
+
+
+def test_empty_dataset_handling():
+    """Verify empty dataset does not fail and reports zero records."""
+    empty_df = pd.DataFrame(columns=ALL_COLUMNS)
+    train_df, test_df, report = split_dataset(empty_df, test_size=0.20, random_state=42)
+    assert not report["is_ready_for_training"]
+    assert report["total_records"] == 0
+    assert train_df.empty
+
+
+def test_pipeline_run_integration(sample_valid_records):
+    """Verify full DatasetManager pipeline execution and file creation."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mgr = DatasetManager(data_dir=tmpdir)
+        result = mgr.process_and_split(sample_valid_records, test_size=0.20, random_state=42)
+
+        assert result["split_report"]["is_ready_for_training"]
+        assert "train_csv" in result["files"]
+        assert "test_csv" in result["files"]
+        assert "dataset_csv" in result["files"]
+
+        # Check files exist
+        assert os.path.exists(result["files"]["train_csv"])
+        assert os.path.exists(result["files"]["test_csv"])
+        assert os.path.exists(result["files"]["dataset_csv"])
+
+        # Check content
+        train_read = pd.read_csv(result["files"]["train_csv"])
+        test_read = pd.read_csv(result["files"]["test_csv"])
+        assert len(train_read) + len(test_read) == 12
+
+

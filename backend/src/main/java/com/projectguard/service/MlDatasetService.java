@@ -6,6 +6,7 @@ import com.projectguard.entity.enums.MlOutcomeStatus;
 import com.projectguard.entity.enums.MlValidationStatus;
 import com.projectguard.entity.enums.ProficiencyLevel;
 import com.projectguard.entity.enums.ProjectComplexity;
+import com.projectguard.entity.enums.Role;
 import com.projectguard.exception.BadRequestException;
 import com.projectguard.exception.ResourceNotFoundException;
 import com.projectguard.repository.*;
@@ -20,6 +21,7 @@ import java.io.PrintWriter;
 import java.io.Writer;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.*;
 
 @Service
@@ -33,6 +35,9 @@ public class MlDatasetService {
     private final UserRepository userRepository;
     private final AssessmentResultRepository assessmentResultRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private MlServiceClient mlServiceClient;
+
     public MlDatasetService(MlDatasetRepository mlDatasetRepository,
                             StudentProfileRepository studentProfileRepository,
                             ProjectRepository projectRepository,
@@ -43,6 +48,10 @@ public class MlDatasetService {
         this.projectRepository = projectRepository;
         this.userRepository = userRepository;
         this.assessmentResultRepository = assessmentResultRepository;
+    }
+
+    public void setMlServiceClient(MlServiceClient mlServiceClient) {
+        this.mlServiceClient = mlServiceClient;
     }
 
     /**
@@ -84,27 +93,29 @@ public class MlDatasetService {
         ProjectComplexity complexity = ProjectComplexity.fromString(project.getComplexityLevel());
         record.setProjectComplexity(complexity);
 
-        // Feature 4: team_size
+        // Feature 4: team_size — observed from profile or project, never default to 1 blindly
         Integer teamSize = overrideTeamSize != null && overrideTeamSize > 0
                 ? overrideTeamSize
-                : (profile.getTeamSize() != null ? profile.getTeamSize() : project.getMinTeamSize());
-        record.setTeamSize(teamSize != null && teamSize > 0 ? teamSize : 1);
+                : (profile.getTeamSize() != null && profile.getTeamSize() > 0
+                        ? profile.getTeamSize()
+                        : (project.getMinTeamSize() != null && project.getMinTeamSize() > 0 ? project.getMinTeamSize() : null));
+        record.setTeamSize(teamSize);
 
-        // Feature 5: available_hours_per_week
+        // Feature 5: available_hours_per_week — observed from explicit input or existing snapshot, never default to 15.0
         Double hoursPerWeek = availableHoursPerWeek != null && availableHoursPerWeek > 0.0
                 ? round2(availableHoursPerWeek)
-                : (record.getAvailableHoursPerWeek() != null ? record.getAvailableHoursPerWeek() : 15.0);
+                : record.getAvailableHoursPerWeek();
         record.setAvailableHoursPerWeek(hoursPerWeek);
 
         // Feature 6: technology_familiarity (1.0 to 4.0)
         Double techFamiliarity = calculateTechnologyFamiliarity(profile, project);
         record.setTechnologyFamiliarity(techFamiliarity);
 
-        // Feature 7: number_of_requirements
+        // Feature 7: number_of_requirements (observed from project, never default to 2)
         Integer numReqs = calculateNumberOfRequirements(project);
         record.setNumberOfRequirements(numReqs);
 
-        // Feature 8: number_of_features
+        // Feature 8: number_of_features (observed from project, never default to 3)
         Integer numFeatures = overrideNumberOfFeatures != null && overrideNumberOfFeatures >= 0
                 ? overrideNumberOfFeatures
                 : calculateNumberOfFeatures(project);
@@ -116,27 +127,28 @@ public class MlDatasetService {
                 : extractPreviousExperience(profile);
         record.setPreviousExperience(prevExp);
 
-        // Feature 10: estimated_effort in hours
+        // Feature 10: estimated_effort in hours (calculated from observed effort/hours, never fabricated)
         Double effort = overrideEstimatedEffort != null && overrideEstimatedEffort > 0.0
                 ? round2(overrideEstimatedEffort)
                 : calculateEstimatedEffort(project, hoursPerWeek);
         record.setEstimatedEffort(effort);
 
         // Ensure outcome is not automatically decided
-        if (record.getId() == null || record.getOutcomeStatus() == null) {
+        if (record.getId() == null || record.getOutcomeStatus() == null || record.getOutcomeStatus() == MlOutcomeStatus.PENDING_OUTCOME) {
             record.setOutcomeStatus(MlOutcomeStatus.PENDING_OUTCOME);
             record.setActualOutcome(null);
             record.setValidationStatus(isRecordComplete(record) ? MlValidationStatus.PENDING : MlValidationStatus.INCOMPLETE);
         }
 
         MlDataset saved = mlDatasetRepository.save(record);
-        log.info("Saved ML dataset snapshot id={} for studentProfileId={} and projectId={} (outcome={})",
-                saved.getId(), profile.getId(), project.getId(), saved.getOutcomeStatus());
+        log.info("Saved ML dataset snapshot id={} for studentProfileId={} and projectId={} (outcome={}, validationStatus={})",
+                saved.getId(), profile.getId(), project.getId(), saved.getOutcomeStatus(), saved.getValidationStatus());
         return saved;
     }
 
     /**
      * Authenticated student registers a project candidate, providing available hours and workflow parameters.
+     * Enforces strict service-level ownership: a student cannot register another student's non-catalog project.
      */
     @Transactional
     public MlDatasetRecordDto registerStudentProject(String usernameOrEmail, MlProjectRegistrationRequest request) {
@@ -150,8 +162,17 @@ public class MlDatasetService {
         Project project = projectRepository.findById(request.getProjectId())
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found: " + request.getProjectId()));
 
+        // Service-level data ownership verification
+        boolean isCatalog = Boolean.TRUE.equals(project.getIsCatalog());
+        boolean isOwner = project.getStudentProfile() != null && project.getStudentProfile().getId().equals(profile.getId());
+        boolean isUnassignedCustom = project.getStudentProfile() == null && !isCatalog;
+
+        if (!isCatalog && !isOwner && !isUnassignedCustom) {
+            throw new BadRequestException("Unauthorized: You cannot register a project that belongs to another student.");
+        }
+
         // Associate project with student if not already catalog or owned
-        if (project.getStudentProfile() == null && (project.getIsCatalog() == null || !project.getIsCatalog())) {
+        if (isUnassignedCustom) {
             project.setStudentProfile(profile);
             projectRepository.save(project);
         }
@@ -172,21 +193,66 @@ public class MlDatasetService {
 
     /**
      * Controlled evaluator / administrator outcome verification.
+     * Overload for internal calls.
      */
     @Transactional
     public MlDatasetRecordDto recordActualOutcome(Long datasetId, MlOutcomeUpdateRequest request) {
+        return recordActualOutcome(datasetId, request, null);
+    }
+
+    /**
+     * Controlled evaluator / administrator outcome verification.
+     * Requires explicit confirmation, meaningful evidence, and safe correction process.
+     */
+    @Transactional
+    public MlDatasetRecordDto recordActualOutcome(Long datasetId, MlOutcomeUpdateRequest request, User operator) {
+        if (operator != null && operator.getRole() != Role.ADMIN) {
+            throw new BadRequestException("Unauthorized: Only administrators can record verified actual project outcomes.");
+        }
+
         MlDataset record = mlDatasetRepository.findById(datasetId)
                 .orElseThrow(() -> new ResourceNotFoundException("ML dataset record not found: " + datasetId));
 
+        if (request == null) {
+            throw new BadRequestException("Outcome update request cannot be null.");
+        }
+
+        // Rule 1: Explicit validation confirmation required
+        if (!Boolean.TRUE.equals(request.getValidationConfirmed())) {
+            throw new BadRequestException("Explicit validation confirmation (validationConfirmed=true) is required before recording a verified outcome.");
+        }
+
+        // Rule 2: Meaningful label evidence required (minimum 10 characters)
+        if (request.getLabelEvidence() == null || request.getLabelEvidence().trim().length() < 10) {
+            throw new BadRequestException("Meaningful label evidence (at least 10 characters) is required before recording a verified outcome.");
+        }
+
+        // Rule 3: Valid outcome
+        if (request.getActualOutcome() == null || request.getActualOutcome().isBlank()) {
+            throw new BadRequestException("Actual outcome is required (FEASIBLE or NOT_FEASIBLE).");
+        }
         String outcome = request.getActualOutcome().trim().toUpperCase();
         if (!"FEASIBLE".equals(outcome) && !"NOT_FEASIBLE".equals(outcome)) {
             throw new BadRequestException("Actual outcome must be FEASIBLE or NOT_FEASIBLE");
         }
 
+        // Rule 4: Safe correction process — do not overwrite a previously verified outcome silently
+        if (record.getOutcomeStatus() != MlOutcomeStatus.PENDING_OUTCOME && record.getActualOutcome() != null) {
+            if (!Boolean.TRUE.equals(request.getAllowCorrection())) {
+                throw new BadRequestException("Record id=" + datasetId + " already has a verified outcome ('" +
+                        record.getActualOutcome() + "'). Set allowCorrection=true and provide explanation to update it.");
+            }
+            String audit = "[AUDIT: Outcome corrected from " + record.getActualOutcome() + " to " + outcome +
+                    " by " + (operator != null ? operator.getUsername() : "ADMIN") + " at " + LocalDateTime.now() + "]";
+            String notes = request.getLabelNotes() != null ? request.getLabelNotes().trim() : "";
+            record.setLabelNotes(notes.isBlank() ? audit : audit + " " + notes);
+        } else {
+            record.setLabelNotes(request.getLabelNotes());
+        }
+
         record.setActualOutcome(outcome);
         record.setOutcomeStatus(MlOutcomeStatus.valueOf(outcome));
-        record.setLabelEvidence(request.getLabelEvidence());
-        record.setLabelNotes(request.getLabelNotes());
+        record.setLabelEvidence(request.getLabelEvidence().trim());
 
         if (isRecordComplete(record)) {
             record.setValidationStatus(MlValidationStatus.VALIDATED);
@@ -195,7 +261,8 @@ public class MlDatasetService {
         }
 
         MlDataset updated = mlDatasetRepository.save(record);
-        log.info("Recorded verified outcome '{}' for ML dataset record id={}", outcome, updated.getId());
+        log.info("Recorded verified outcome '{}' for ML dataset record id={} (validationStatus={})",
+                outcome, updated.getId(), updated.getValidationStatus());
         return mapToDto(updated);
     }
 
@@ -245,6 +312,7 @@ public class MlDatasetService {
 
         stats.setCompleteRecords(complete);
         stats.setIncompleteRecords(incomplete);
+        stats.setRejectedRecords(all.stream().filter(d -> d.getValidationStatus() == MlValidationStatus.REJECTED).count());
         stats.setPendingOutcomeRecords(pending);
         stats.setVerifiedFeasibleRecords(feasible);
         stats.setVerifiedNotFeasibleRecords(notFeasible);
@@ -275,6 +343,11 @@ public class MlDatasetService {
 
     /**
      * Dedicated Step 6 dataset preparation and validation routine.
+     * Enforces strict training eligibility rules:
+     * - All 10 input features present and valid.
+     * - Actual outcome is FEASIBLE or NOT_FEASIBLE.
+     * - Meaningful label evidence present.
+     * - Non-duplicate student-project snapshot.
      */
     @Transactional
     public MlDatasetPrepareSummaryDto prepareAndValidateDataset() {
@@ -285,8 +358,11 @@ public class MlDatasetService {
         List<MlDatasetPrepareSummaryDto.ExcludedRecordDetail> details = new ArrayList<>();
         Set<String> seenKeys = new HashSet<>();
 
+        long complete = 0;
+        long incomplete = 0;
         long eligible = 0;
         long excluded = 0;
+        long rejected = 0;
         long pending = 0;
         long feasible = 0;
         long notFeasible = 0;
@@ -302,9 +378,20 @@ public class MlDatasetService {
                 duplicates++;
             }
 
+            if (isRecordComplete(rec)) {
+                complete++;
+            } else {
+                incomplete++;
+            }
+
             if (rec.getOutcomeStatus() == MlOutcomeStatus.PENDING_OUTCOME) {
                 pending++;
                 excluded++;
+                if (isRecordComplete(rec)) {
+                    rec.setValidationStatus(MlValidationStatus.PENDING);
+                } else {
+                    rec.setValidationStatus(MlValidationStatus.INCOMPLETE);
+                }
                 details.add(new MlDatasetPrepareSummaryDto.ExcludedRecordDetail(
                         rec.getId(), sid, pid, "Pending outcome: not yet verified by evaluator (excluded from supervised training)"
                 ));
@@ -318,10 +405,14 @@ public class MlDatasetService {
             if (isDup) {
                 errors.add("Duplicate student-project snapshot");
             }
+            if (rec.getLabelEvidence() == null || rec.getLabelEvidence().trim().length() < 10) {
+                errors.add("Meaningful label evidence is missing or too short");
+            }
 
             if (!errors.isEmpty()) {
                 excluded++;
-                rec.setValidationStatus(MlValidationStatus.REJECTED);
+                rejected++;
+                rec.setValidationStatus(isRecordComplete(rec) ? MlValidationStatus.REJECTED : MlValidationStatus.INCOMPLETE);
                 details.add(new MlDatasetPrepareSummaryDto.ExcludedRecordDetail(
                         rec.getId(), sid, pid, String.join("; ", errors)
                 ));
@@ -333,8 +424,11 @@ public class MlDatasetService {
 
         mlDatasetRepository.saveAll(all);
 
+        summary.setCompleteRecords(complete);
+        summary.setIncompleteRecords(incomplete);
         summary.setEligibleRecords(eligible);
         summary.setExcludedRecords(excluded);
+        summary.setRejectedRecords(rejected);
         summary.setPendingOutcomeRecords(pending);
         summary.setVerifiedFeasibleRecords(feasible);
         summary.setVerifiedNotFeasibleRecords(notFeasible);
@@ -346,6 +440,7 @@ public class MlDatasetService {
 
     /**
      * Step 8 CSV Export: exports only complete, validated records with verified actual outcomes.
+     * Strictly requires validationStatus == VALIDATED and valid evidence.
      */
     @Transactional(readOnly = true)
     public void exportCleanedTrainingCsv(Writer writer) {
@@ -355,11 +450,18 @@ public class MlDatasetService {
 
         List<MlDataset> all = mlDatasetRepository.findAll();
         for (MlDataset rec : all) {
+            // Rule: strictly require validationStatus == VALIDATED
+            if (rec.getValidationStatus() != MlValidationStatus.VALIDATED) {
+                continue;
+            }
             if (rec.getOutcomeStatus() == MlOutcomeStatus.PENDING_OUTCOME) {
                 continue; // Do not export pending outcomes
             }
             if (rec.getActualOutcome() == null || (!"FEASIBLE".equalsIgnoreCase(rec.getActualOutcome()) && !"NOT_FEASIBLE".equalsIgnoreCase(rec.getActualOutcome()))) {
                 continue;
+            }
+            if (rec.getLabelEvidence() == null || rec.getLabelEvidence().trim().isBlank()) {
+                continue; // Require valid evidence
             }
             List<String> errors = validateRecordFields(rec);
             if (!errors.isEmpty()) {
@@ -381,6 +483,57 @@ public class MlDatasetService {
             );
         }
         pw.flush();
+    }
+
+    /**
+     * Retrieves all verified, validated records eligible for ML training.
+     */
+    @Transactional(readOnly = true)
+    public List<MlDatasetRecordDto> getTrainingReadyRecords() {
+        return mlDatasetRepository.findAll().stream()
+                .filter(r -> r.getValidationStatus() == MlValidationStatus.VALIDATED)
+                .filter(r -> r.getOutcomeStatus() != MlOutcomeStatus.PENDING_OUTCOME)
+                .filter(r -> "FEASIBLE".equalsIgnoreCase(r.getActualOutcome()) || "NOT_FEASIBLE".equalsIgnoreCase(r.getActualOutcome()))
+                .filter(r -> validateRecordFields(r).isEmpty())
+                .map(this::mapToDto)
+                .toList();
+    }
+
+    /**
+     * Authoritative flow:
+     * MySQL -> Spring Boot prepare & validate -> Export training-ready records -> Python ML Service pipeline -> 80/20 train/test CSVs.
+     */
+    @Transactional
+    public Map<String, Object> triggerMlServicePipeline() {
+        // Step 1: Run full validation and preparation on MySQL records
+        MlDatasetPrepareSummaryDto prepSummary = prepareAndValidateDataset();
+
+        // Step 2: Fetch only training-ready records
+        List<MlDataset> all = mlDatasetRepository.findAll();
+        List<MlDatasetRecordDto> trainingReadyRecords = all.stream()
+                .filter(r -> r.getValidationStatus() == MlValidationStatus.VALIDATED)
+                .filter(r -> r.getOutcomeStatus() != MlOutcomeStatus.PENDING_OUTCOME)
+                .filter(r -> "FEASIBLE".equalsIgnoreCase(r.getActualOutcome()) || "NOT_FEASIBLE".equalsIgnoreCase(r.getActualOutcome()))
+                .filter(r -> validateRecordFields(r).isEmpty())
+                .map(this::mapToDto)
+                .toList();
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("databasePreparationSummary", prepSummary);
+        response.put("trainingReadyRecordsCount", trainingReadyRecords.size());
+
+        // Step 3: Call Python ML Service
+        if (mlServiceClient != null) {
+            Map<String, Object> pyResult = mlServiceClient.triggerPipeline(trainingReadyRecords, 0.20, 42, true);
+            response.put("mlServicePipeline", pyResult);
+        } else {
+            Map<String, Object> offline = new LinkedHashMap<>();
+            offline.put("status", "UNCONFIGURED");
+            offline.put("message", "MlServiceClient is not configured on Spring Boot backend.");
+            response.put("mlServicePipeline", offline);
+        }
+
+        return response;
     }
 
     /**
@@ -617,9 +770,10 @@ public class MlDatasetService {
 
     /**
      * Feature 7: Total project requirements (non-negative integer).
+     * Strictly observed from project definition — does NOT assume every project has 2 requirements.
      */
     public Integer calculateNumberOfRequirements(Project project) {
-        if (project == null) return 0;
+        if (project == null) return null;
         if (project.getRequirements() != null && !project.getRequirements().isEmpty()) {
             return project.getRequirements().size();
         }
@@ -630,21 +784,26 @@ public class MlDatasetService {
         if (project.getNonFunctionalRequirements() != null && !project.getNonFunctionalRequirements().isBlank()) {
             count += splitCount(project.getNonFunctionalRequirements());
         }
-        return Math.max(count, 2); // Baseline project requirements count
+        if (project.getDataRequirements() != null && !project.getDataRequirements().isBlank()) {
+            count += splitCount(project.getDataRequirements());
+        }
+        return count > 0 ? count : null;
     }
 
     /**
      * Feature 8: Total project features (non-negative integer).
+     * Strictly observed from project definition — does NOT assume every project has 3 features.
      */
     public Integer calculateNumberOfFeatures(Project project) {
-        if (project == null) return 0;
+        if (project == null) return null;
+        int count = 0;
         if (project.getFunctionalRequirements() != null && !project.getFunctionalRequirements().isBlank()) {
-            return Math.max(1, splitCount(project.getFunctionalRequirements()));
+            count = splitCount(project.getFunctionalRequirements());
         }
-        if (project.getProposedSolution() != null && !project.getProposedSolution().isBlank()) {
-            return Math.max(1, splitCount(project.getProposedSolution()));
+        if (count == 0 && project.getProposedSolution() != null && !project.getProposedSolution().isBlank()) {
+            count = splitCount(project.getProposedSolution());
         }
-        return 3; // Standard baseline features
+        return count > 0 ? count : null;
     }
 
     /**
@@ -673,17 +832,18 @@ public class MlDatasetService {
 
     /**
      * Feature 10: Estimated project effort in hours.
-     * Derived from project estimated weeks and available hours per week.
+     * Derived from project estimated weeks and observed available hours per week.
+     * Does NOT assume 12 weeks or 15 hours/week if unobserved.
      */
     public Double calculateEstimatedEffort(Project project, Double availableHoursPerWeek) {
-        if (project == null) return null;
-        int weeks = project.getEstimatedWeeks() != null && project.getEstimatedWeeks() > 0
-                ? project.getEstimatedWeeks()
-                : 12;
-        double hoursPerWeek = availableHoursPerWeek != null && availableHoursPerWeek > 0.0
-                ? availableHoursPerWeek
-                : 15.0;
-        return round1(weeks * hoursPerWeek);
+        if (project == null || availableHoursPerWeek == null || availableHoursPerWeek <= 0.0) {
+            return null;
+        }
+        Integer weeks = project.getEstimatedWeeks();
+        if (weeks == null || weeks <= 0) {
+            return null;
+        }
+        return round1(weeks * availableHoursPerWeek);
     }
 
     public boolean isRecordComplete(MlDataset r) {

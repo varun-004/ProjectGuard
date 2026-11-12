@@ -856,7 +856,7 @@ public class AiProjectGeneratorService {
                         mlDatasetService.recordDatasetSnapshot(
                                 profile,
                                 finalSaved,
-                                15.0,
+                                null, // Do not assume unobserved hours; keep null until student explicitly registers
                                 profile.getTeamSize(),
                                 null,
                                 null,
